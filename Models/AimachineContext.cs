@@ -174,6 +174,7 @@ public partial class AimachineContext : DbContext
 
             entity.HasOne(d => d.UpdateByNavigation).WithMany(p => p.CompanyProfiles)
                 .HasForeignKey(d => d.UpdateBy)
+                .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("FK__company_p__updat__7D439ABD");
         });
 
@@ -304,7 +305,7 @@ public partial class AimachineContext : DbContext
 
             entity.HasOne(d => d.Events).WithMany(p => p.EventsImgs)
                 .HasForeignKey(d => d.EventsId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
+                .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK__events_im__event__7C4F7684");
         });
 
