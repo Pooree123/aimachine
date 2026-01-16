@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Aimachine\\Aimachine\\Aimachine.csproj": {}
+    "D:\\aimachine\\Aimachine\\Aimachine.csproj": {}
   },
   "projects": {
-    "D:\\Aimachine\\Aimachine\\Aimachine.csproj": {
+    "D:\\aimachine\\Aimachine\\Aimachine.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Aimachine\\Aimachine\\Aimachine.csproj",
+        "projectUniqueName": "D:\\aimachine\\Aimachine\\Aimachine.csproj",
         "projectName": "Aimachine",
-        "projectPath": "D:\\Aimachine\\Aimachine\\Aimachine.csproj",
+        "projectPath": "D:\\aimachine\\Aimachine\\Aimachine.csproj",
         "packagesPath": "C:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "D:\\Aimachine\\Aimachine\\obj\\",
+        "outputPath": "D:\\aimachine\\Aimachine\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -95,7 +95,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.101/PortableRuntimeIdentifierGraph.json",
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.102/PortableRuntimeIdentifierGraph.json",
           "packagesToPrune": {
             "Microsoft.AspNetCore": "(,10.0.32767]",
             "Microsoft.AspNetCore.Antiforgery": "(,10.0.32767]",
