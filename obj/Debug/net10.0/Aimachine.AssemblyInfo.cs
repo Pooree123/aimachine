@@ -11,10 +11,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("t")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("Aimachine")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d4ff8a120671f192bb693bd6ae302f1344ad0fe7")]
 [assembly: System.Reflection.AssemblyProductAttribute("Aimachine")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Aimachine")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

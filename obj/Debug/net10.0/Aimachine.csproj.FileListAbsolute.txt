@@ -157,3 +157,6 @@ D:\Aimachine\Aimachine\obj\Debug\net10.0\Aimachine.pdb
 D:\Aimachine\Aimachine\obj\Debug\net10.0\Aimachine.genruntimeconfig.cache
 D:\Aimachine\Aimachine\obj\Debug\net10.0\ref\Aimachine.dll
 D:\Aimachine\Aimachine\bin\Debug\net10.0\BCrypt.Net-Next.dll
+D:\Aimachine\Aimachine\obj\Debug\net10.0\Aimachine.sourcelink.json
+D:\aimachine\Aimachine\bin\Debug\net10.0\Aimachine.staticwebassets.runtime.json
+D:\aimachine\Aimachine\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt
