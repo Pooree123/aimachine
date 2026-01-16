@@ -20,7 +20,6 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
-        // 1. GET: ดึงข้อมูล User ทั้งหมด (ไม่เอาคนทีโดนลบ)
         [HttpGet]
         public async Task<IActionResult> GetAllUsers()
         {
@@ -39,7 +38,6 @@ namespace Aimachine.Controllers
             return Ok(users);
         }
 
-        // 2. GET: ดึงข้อมูลตาม ID
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUserById(int id)
         {
@@ -53,7 +51,6 @@ namespace Aimachine.Controllers
             return Ok(user);
         }
 
-        // 3. POST: สร้าง User ใหม่
         [HttpPost]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
@@ -63,8 +60,6 @@ namespace Aimachine.Controllers
                 return BadRequest("Username นี้มีคนใช้แล้ว");
             }
 
-            // 2. Hash Password (สำคัญมาก!)
-            // ใช้ตัวแปรนี้ไปบันทึกลง Database แทนรหัสจริง
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
             // 3. สร้าง Object ลง DB
@@ -101,14 +96,12 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
         }
 
-        // 5. DELETE: ลบ User (Soft Delete)
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
             var user = await _context.AdminUsers.FindAsync(id);
             if (user == null) return NotFound();
 
-            // เราไม่ลบจริง แต่แค่แปะป้ายว่าลบแล้ว (Soft Delete)
             user.Deleteflag = true;
             user.UpdateAt = DateTime.UtcNow.AddHours(7);
 
@@ -119,17 +112,14 @@ namespace Aimachine.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto request)
         {
-            // 1. ค้นหา User จาก Username
             var user = await _context.AdminUsers
                 .FirstOrDefaultAsync(u => u.Username == request.Username && u.Deleteflag == false);
 
-            // 2. ถ้าไม่เจอ User
             if (user == null)
             {
                 return Unauthorized("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
             }
 
-            // 3. ตรวจสอบรหัสผ่าน (เอาที่กรอก มาเทียบกับ Hash ใน DB)
             bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
 
             if (!isPasswordValid)
@@ -137,7 +127,6 @@ namespace Aimachine.Controllers
                 return Unauthorized("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
             }
 
-            // 4. ถ้าผ่านหมด (Login สำเร็จ)
             return Ok(new
             {
                 Message = "เข้าสู่ระบบสำเร็จ",

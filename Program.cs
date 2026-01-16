@@ -1,12 +1,9 @@
-using Microsoft.EntityFrameworkCore;
 using Aimachine.Models;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// =====================
-// Add services
-// =====================
-
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -15,23 +12,16 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod());
 });
 
+// DbContext
 builder.Services.AddDbContext<AimachineContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection")
-    )
-);
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+// Controllers + OpenAPI
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
-// =====================
-// Build (มีได้ครั้งเดียว)
-// =====================
 var app = builder.Build();
 
-// =====================
-// Middleware
-// =====================
 app.UseCors("AllowAll");
 
 if (app.Environment.IsDevelopment())
@@ -42,8 +32,6 @@ if (app.Environment.IsDevelopment())
 app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseAuthorization();
-
-    
 
 app.MapControllers();
 app.Run();
