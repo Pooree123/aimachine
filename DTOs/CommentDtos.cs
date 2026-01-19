@@ -1,9 +1,19 @@
-﻿namespace Aimachine.DTOs;
+﻿using Microsoft.AspNetCore.Http; // อย่าลืม using นี้
+using System.ComponentModel.DataAnnotations;
 
-public class CreateCommentDto
+namespace Aimachine.DTOs
 {
-    public int JobTitleId { get; set; }
-    public string? ProfileImg { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Message { get; set; } = string.Empty;
+    public class CreateCommentDto
+    {
+        public int JobTitleId { get; set; }
+
+        [MaxLength(255)]
+        public string Name { get; set; } = string.Empty;
+
+        public string Message { get; set; } = string.Empty;
+
+        public IFormFile? ImageFile { get; set; }
+
+        public string? ProfileImg { get; set; }
+    }
 }

@@ -10,7 +10,7 @@ namespace Aimachine.Controllers
     public class PartnersController : ControllerBase
     {
         private readonly AimachineContext _context;
-        private readonly IWebHostEnvironment _environment; // จำเป็นสำหรับการจัดการไฟล์
+        private readonly IWebHostEnvironment _environment;
 
         public PartnersController(AimachineContext context, IWebHostEnvironment environment)
         {
@@ -24,18 +24,17 @@ namespace Aimachine.Controllers
         {
             try
             {
-                // สร้าง Base URL เพื่อให้ Frontend นำไปแสดงผลได้เลย
                 var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
                 var data = await _context.Partners
                   .AsNoTracking()
-                  .Where(x => x.Status != "Deleted") // กรองตัวที่ลบออก
+                  .Where(x => x.Status != "Deleted")
                   .OrderByDescending(x => x.Id)
                   .Select(x => new
                   {
                       x.Id,
-                      // สร้าง URL เต็มสำหรับรูปภาพ
-                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/images/partners/{x.Image}",
+                      // ✅ 1. แก้ URL ตอนดึงรูปมาแสดง (จาก images -> uploads)
+                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
                       x.Name,
                       x.Status,
                       x.CreatedBy,
@@ -69,7 +68,8 @@ namespace Aimachine.Controllers
                   .Select(x => new
                   {
                       x.Id,
-                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/images/partners/{x.Image}",
+                      // ✅ 2. แก้ URL ตรงนี้ด้วย
+                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
                       x.Name,
                       x.Status,
                       x.CreatedBy,
@@ -91,7 +91,6 @@ namespace Aimachine.Controllers
         }
 
         // ✅ POST: /api/partners
-        // ใช้ FromForm เพื่อรองรับการอัปโหลดไฟล์
         [HttpPost]
         public async Task<IActionResult> Create([FromForm] CreatePartnerDto request)
         {
@@ -100,7 +99,6 @@ namespace Aimachine.Controllers
 
             try
             {
-                // 1. Validation (จาก HEAD)
                 if (request.CreatedBy.HasValue)
                 {
                     var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.CreatedBy.Value);
@@ -112,11 +110,12 @@ namespace Aimachine.Controllers
                     return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive เท่านั้น" });
                 }
 
-                // 2. จัดการไฟล์ (จาก Origin/Main)
                 string newFileName = null;
-                if (request.ImageFile != null) // ตรวจสอบว่า DTO ของคุณมี Property ImageFile (IFormFile)
+                if (request.ImageFile != null)
                 {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "images", "partners");
+                    // ✅ 3. แก้ Path ที่บันทึกไฟล์ (images -> uploads)
+                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
+
                     if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
                     newFileName = Guid.NewGuid().ToString() + Path.GetExtension(request.ImageFile.FileName);
@@ -128,11 +127,10 @@ namespace Aimachine.Controllers
                     }
                 }
 
-                // 3. บันทึกลง DB
                 var entity = new Partner
                 {
                     Name = request.Name.Trim(),
-                    Image = newFileName, // เก็บชื่อไฟล์
+                    Image = newFileName,
                     Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status,
                     CreatedBy = request.CreatedBy,
                     UpdateBy = request.CreatedBy,
@@ -160,14 +158,14 @@ namespace Aimachine.Controllers
                 var entity = await _context.Partners.FindAsync(id);
                 if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
-                // Validation
                 if (!string.IsNullOrWhiteSpace(request.Status) && request.Status != "Active" && request.Status != "inActive")
                     return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
-                // จัดการไฟล์ (ลบไฟล์เก่า -> ลงไฟล์ใหม่)
                 if (request.ImageFile != null)
                 {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "images", "partners");
+                    // ✅ 4. แก้ Path ตอนแก้ไขไฟล์ (images -> uploads)
+                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
+                    if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
                     // ลบไฟล์เก่า
                     if (!string.IsNullOrEmpty(entity.Image))
@@ -189,7 +187,6 @@ namespace Aimachine.Controllers
                 }
 
                 entity.Name = request.Name.Trim();
-                // ถ้าไม่ส่ง Status มา ให้ใช้ค่าเดิม
                 if (!string.IsNullOrWhiteSpace(request.Status)) entity.Status = request.Status;
 
                 entity.UpdateBy = request.UpdateBy;
@@ -213,10 +210,10 @@ namespace Aimachine.Controllers
                 var entity = await _context.Partners.FindAsync(id);
                 if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
-                // ลบไฟล์จริงออกจากเครื่องด้วย (จาก Origin/Main)
                 if (!string.IsNullOrEmpty(entity.Image))
                 {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "images", "partners");
+                    // ✅ 5. แก้ Path ตอนลบไฟล์ (images -> uploads)
+                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
                     string filePath = Path.Combine(uploadsFolder, entity.Image);
 
                     if (System.IO.File.Exists(filePath))

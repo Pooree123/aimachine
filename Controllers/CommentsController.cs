@@ -10,101 +10,143 @@ namespace Aimachine.Controllers;
 public class CommentsController : ControllerBase
 {
     private readonly AimachineContext _context;
-    public CommentsController(AimachineContext context) => _context = context;
+    private readonly IWebHostEnvironment _environment; // ✅ เพิ่มตัวจัดการ Path
 
-    // GET: all
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
-    => Ok(await _context.Comments.AsNoTracking()
-      .OrderByDescending(c => c.Id)
-      .Select(c => new {
-          c.Id,
-          c.JobTitleId,
-          c.ProfileImg,
-          c.Name,
-          c.Message,
-          c.CreatedAt
-      })
-      .ToListAsync());
-
-    // GET: by job title (one -> many)
-    [HttpGet("by-jobtitle/{jobTitleId:int}")]
-    public async Task<IActionResult> GetByJobTitle(int jobTitleId)
-    => Ok(await _context.Comments.AsNoTracking()
-      .Where(c => c.JobTitleId == jobTitleId)
-      .OrderByDescending(c => c.Id)
-      .Select(c => new {
-          c.Id,
-          c.ProfileImg,
-          c.Name,
-          c.Message,
-          c.CreatedAt
-      })
-      .ToListAsync());
-
-    // POST
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateCommentDto dto)
+    public CommentsController(AimachineContext context, IWebHostEnvironment environment)
     {
-        if (dto.JobTitleId <= 0)
-            return BadRequest(new { Message = "job_title_id ไม่ถูกต้อง" });
+        _context = context;
+        _environment = environment;
+    }
 
-        if (string.IsNullOrWhiteSpace(dto.Name))
-            return BadRequest(new { Message = "กรุณากรอก name" });
+    // GET: all
+    [HttpGet]
+    public async Task<IActionResult> GetAll()
+    {
+        // สร้าง Base URL
+        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
-        if (string.IsNullOrWhiteSpace(dto.Message))
-            return BadRequest(new { Message = "กรุณากรอก message" });
+        return Ok(await _context.Comments.AsNoTracking()
+          .OrderByDescending(c => c.Id)
+          .Select(c => new
+          {
+              c.Id,
+              c.JobTitleId,
+              // ✅ เช็คถ้าเป็น path เต็มอยู่แล้ว หรือเป็น path ภายใน
+              ProfileImg = c.ProfileImg.StartsWith("http") ? c.ProfileImg : $"{baseUrl}/{c.ProfileImg}",
+              c.Name,
+              c.Message,
+              c.CreatedAt
+          })
+          .ToListAsync());
+    }
+
+    // GET: by job title
+    [HttpGet("by-jobtitle/{jobTitleId:int}")]
+    public async Task<IActionResult> GetByJobTitle(int jobTitleId)
+    {
+        var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+        return Ok(await _context.Comments.AsNoTracking()
+          .Where(c => c.JobTitleId == jobTitleId)
+          .OrderByDescending(c => c.Id)
+          .Select(c => new
+          {
+              c.Id,
+              ProfileImg = c.ProfileImg.StartsWith("http") ? c.ProfileImg : $"{baseUrl}/{c.ProfileImg}",
+              c.Name,
+              c.Message,
+              c.CreatedAt
+          })
+          .ToListAsync());
+    }
+
+    // ✅ POST (แก้ใหม่รองรับ Upload ในตัว)
+    [HttpPost]
+    public async Task<IActionResult> Create([FromForm] CreateCommentDto dto) // เปลี่ยนเป็น FromForm
+    {
+        if (dto.JobTitleId <= 0) return BadRequest(new { Message = "job_title_id ไม่ถูกต้อง" });
+        if (string.IsNullOrWhiteSpace(dto.Name)) return BadRequest(new { Message = "กรุณากรอก name" });
+        if (string.IsNullOrWhiteSpace(dto.Message)) return BadRequest(new { Message = "กรุณากรอก message" });
 
         if (!await _context.JobTitles.AnyAsync(j => j.Id == dto.JobTitleId))
             return BadRequest(new { Message = "ไม่พบ job_title นี้" });
 
-        var entity = new Comment
+        try
         {
-            JobTitleId = dto.JobTitleId,
-            ProfileImg = string.IsNullOrWhiteSpace(dto.ProfileImg)
-            ? "uploads/Default_pfp.jpg"   // ✅ default
-                    : dto.ProfileImg.Trim(),
-            Name = dto.Name.Trim(),
-            Message = dto.Message.Trim(),
-            CreatedAt = DateTime.UtcNow.AddHours(7)
-        };
+            // 1. กำหนดค่าเริ่มต้นเป็นภาพ Default
+            string imagePath = "uploads/Default_pfp.jpg";
 
-        _context.Comments.Add(entity);
-        await _context.SaveChangesAsync();
+            // 2. ถ้ามีการอัปโหลดไฟล์มา ให้บันทึกไฟล์
+            if (dto.ImageFile != null && dto.ImageFile.Length > 0)
+            {
+                // กำหนดโฟลเดอร์ปลายทาง
+                string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "comments");
 
-        return Ok(new { Message = "เพิ่มคอมเมนต์สำเร็จ", Id = entity.Id });
+                // ถ้าไม่มีโฟลเดอร์ ให้สร้างใหม่
+                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+
+                // ตั้งชื่อไฟล์ใหม่กันซ้ำ
+                string fileName = $"{Guid.NewGuid()}{Path.GetExtension(dto.ImageFile.FileName)}";
+                string fullPath = Path.Combine(uploadsFolder, fileName);
+
+                // บันทึกไฟล์ลงเครื่อง
+                using (var stream = new FileStream(fullPath, FileMode.Create))
+                {
+                    await dto.ImageFile.CopyToAsync(stream);
+                }
+
+                // อัปเดต path ที่จะลง Database
+                imagePath = $"uploads/comments/{fileName}";
+            }
+
+            // 3. บันทึกลง Database
+            var entity = new Comment
+            {
+                JobTitleId = dto.JobTitleId,
+                ProfileImg = imagePath, // ใช้ path ที่ได้จากการอัปโหลด หรือ Default
+                Name = dto.Name.Trim(),
+                Message = dto.Message.Trim(),
+                CreatedAt = DateTime.UtcNow.AddHours(7)
+            };
+
+            _context.Comments.Add(entity);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "เพิ่มคอมเมนต์สำเร็จ", Id = entity.Id, Image = imagePath });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = "เพิ่มคอมเมนต์ไม่สำเร็จ", Error = ex.Message });
+        }
     }
 
-
-    // DELETE (ลบจริง)
-    [HttpDelete("{id:int}")]
+    // DELETE
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var entity = await _context.Comments.FindAsync(id);
-        if (entity == null)
-            return NotFound(new { Message = "ไม่พบคอมเมนต์" });
+        try
+        {
+            var entity = await _context.Comments.FindAsync(id);
+            if (entity == null) return NotFound(new { Message = "ไม่พบคอมเมนต์" });
 
-        _context.Comments.Remove(entity);
-        await _context.SaveChangesAsync();
+            // (Option) ลบรูปออกจากโฟลเดอร์ด้วย ถ้าไม่ใช่รูป Default
+            if (!string.IsNullOrEmpty(entity.ProfileImg) && !entity.ProfileImg.Contains("Default_pfp.jpg"))
+            {
+                var filePath = Path.Combine(_environment.WebRootPath, entity.ProfileImg);
+                if (System.IO.File.Exists(filePath))
+                {
+                    System.IO.File.Delete(filePath);
+                }
+            }
 
-        return Ok(new { Message = "ลบคอมเมนต์สำเร็จ" });
+            _context.Comments.Remove(entity);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "ลบคอมเมนต์สำเร็จ" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = "ลบไม่สำเร็จ", Error = ex.Message });
+        }
     }
-    [HttpPost("upload")]
-    public async Task<IActionResult> Upload(IFormFile file)
-    {
-        if (file == null || file.Length == 0)
-            return BadRequest(new { Message = "ไม่มีไฟล์" });
-
-        var folder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/comments");
-        Directory.CreateDirectory(folder);
-
-        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-        var filePath = Path.Combine(folder, fileName);
-
-        using var stream = new FileStream(filePath, FileMode.Create);
-        await file.CopyToAsync(stream);
-
-        return Ok(new { Path = $"uploads/comments/{fileName}" });
-    }
-
 }
