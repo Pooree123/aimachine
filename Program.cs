@@ -13,8 +13,8 @@ builder.Services.AddCors(options =>
 });
 
 // DbContext
-builder.Services.AddDbContext<AimachineContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), sqlOptions => sqlOptions.EnableRetryOnFailure()));
+// builder.Services.AddDbContext<AimachineContext>(options =>
+    // options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), sqlOptions => sqlOptions.EnableRetryOnFailure()));
 
 // Controllers + OpenAPI
 builder.Services.AddControllers();

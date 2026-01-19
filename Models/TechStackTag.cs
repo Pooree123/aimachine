@@ -9,7 +9,7 @@ public partial class TechStackTag
 
     public int DepartmentId { get; set; }
 
-    public string? ExpertiseTitle { get; set; }
+    public string? TechStackTitle { get; set; }
 
     public int? CreatedBy { get; set; }
 
@@ -23,11 +23,11 @@ public partial class TechStackTag
 
     public virtual DepartmentType Department { get; set; } = null!;
 
-    public virtual ICollection<ExpertiseStatTag> ExpertiseStatTags { get; set; } = new List<ExpertiseStatTag>();
-
     public virtual ICollection<InternTag> InternTags { get; set; } = new List<InternTag>();
 
     public virtual ICollection<JobsTag> JobsTags { get; set; } = new List<JobsTag>();
+
+    public virtual ICollection<TechStackTag1> TechStackTag1s { get; set; } = new List<TechStackTag1>();
 
     public virtual AdminUser? UpdateByNavigation { get; set; }
 }
