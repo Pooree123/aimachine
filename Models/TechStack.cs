@@ -21,7 +21,7 @@ public partial class TechStack
 
     public virtual AdminUser? CreatedByNavigation { get; set; }
 
-    public virtual ICollection<ExpertiseStatTag> ExpertiseStatTags { get; set; } = new List<ExpertiseStatTag>();
+    public virtual ICollection<TechStackTag1> TechStackTag1s { get; set; } = new List<TechStackTag1>();
 
     public virtual AdminUser? UpdateByNavigation { get; set; }
 }
