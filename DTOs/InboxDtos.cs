@@ -19,7 +19,6 @@ namespace Aimachine.DTOs
         [EmailAddress, MaxLength(100)]
         public string? Email { get; set; }
 
-        // ถ้ายังไม่มีระบบ auth ให้ส่ง adminId มาใน body ก่อน
         public int? CreatedBy { get; set; }
     }
 
