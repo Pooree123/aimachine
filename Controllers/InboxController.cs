@@ -16,8 +16,6 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
-        // ✅ GET: /api/inbox?topicId=1
-        // ดึงเฉพาะที่ Deleteflag != true (คือยังไม่ถูกลบ)
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int? topicId)
         {
@@ -25,7 +23,7 @@ namespace Aimachine.Controllers
             {
                 var query = _context.Inboxes
                   .AsNoTracking()
-                  .Where(x => x.Deleteflag != true) // ✅ Filter Soft Delete
+                  .Where(x => x.Deleteflag != true)
                   .Include(x => x.Title)
                   .AsQueryable();
 
@@ -56,7 +54,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ GET: /api/inbox/5
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -65,7 +62,7 @@ namespace Aimachine.Controllers
                 var data = await _context.Inboxes
                   .AsNoTracking()
                   .Include(x => x.Title)
-                  // ✅ เช็คทั้ง ID และต้องยังไม่ถูกลบ
+   
                   .Where(x => x.Id == id && x.Deleteflag != true)
                   .Select(x => new
                   {
@@ -92,7 +89,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ POST: /api/inbox
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateInboxDto request)
         {
@@ -116,7 +112,7 @@ namespace Aimachine.Controllers
                     UpdateBy = request.CreatedBy,
                     CreatedAt = DateTime.UtcNow.AddHours(7),
                     UpdateAt = DateTime.UtcNow.AddHours(7),
-                    Deleteflag = false // ✅ กำหนดค่าเริ่มต้น
+                    Deleteflag = false 
                 };
 
                 _context.Inboxes.Add(entity);
@@ -130,43 +126,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ PUT: /api/inbox/5
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateInboxDto request)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
-
-            try
-            {
-                var entity = await _context.Inboxes.FindAsync(id);
-                // ต้องเช็คด้วยว่ารายการนี้ถูกลบไปแล้วหรือยัง
-                if (entity == null || entity.Deleteflag == true)
-                    return NotFound(new { Message = "ไม่พบข้อมูล Inbox นี้" });
-
-                var topicExists = await _context.Topics.AnyAsync(t => t.Id == request.TitleId);
-                if (!topicExists)
-                    return BadRequest(new { Message = "Topic ไม่ถูกต้อง (ไม่พบในระบบ)" });
-
-                entity.TitleId = request.TitleId;
-                entity.Name = request.Name.Trim();
-                entity.Message = request.Message.Trim();
-                entity.Phone = request.Phone?.Trim();
-                entity.Email = request.Email?.Trim();
-                entity.UpdateBy = request.UpdateBy;
-                entity.UpdateAt = DateTime.UtcNow.AddHours(7);
-
-                await _context.SaveChangesAsync();
-
-                return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
-            }
-        }
-
-        // ✅ DELETE: /api/inbox/5 (เปลี่ยนเป็น Soft Delete)
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -176,12 +135,11 @@ namespace Aimachine.Controllers
                 if (entity == null || entity.Deleteflag == true)
                     return NotFound(new { Message = "ไม่พบข้อมูล Inbox นี้" });
 
-                // ✅ เปลี่ยน Logic เป็น Soft Delete
                 entity.Deleteflag = true;
-                entity.UpdateAt = DateTime.UtcNow.AddHours(7); // อัปเดตเวลาลบด้วย
+                entity.UpdateAt = DateTime.UtcNow.AddHours(7); 
 
-                // _context.Inboxes.Remove(entity); // ❌ ไม่ใช้ Remove แล้ว
-                _context.Inboxes.Update(entity);    // ✅ ใช้ Update แทน
+
+                _context.Inboxes.Update(entity);    
 
                 await _context.SaveChangesAsync();
 

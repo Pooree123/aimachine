@@ -12,12 +12,11 @@ public class JobTitlesController : ControllerBase
     private readonly AimachineContext _context;
     public JobTitlesController(AimachineContext context) => _context = context;
 
-    // GET: all (พร้อมชื่อ department)
     [HttpGet]
     public async Task<IActionResult> GetAll()
   => Ok(await _context.JobTitles
     .AsNoTracking()
-    .Include(j => j.Department) // ✅ ใช้ Department
+    .Include(j => j.Department) 
         .Select(j => new {
             j.Id,
             j.JobsTitle,
@@ -27,7 +26,6 @@ public class JobTitlesController : ControllerBase
     .ToListAsync());
 
 
-    // GET: by department (one -> many)
     [HttpGet("by-department/{departmentId:int}")]
     public async Task<IActionResult> GetByDepartment(int departmentId)
   => Ok(await _context.JobTitles
@@ -37,7 +35,6 @@ public class JobTitlesController : ControllerBase
     .ToListAsync());
 
 
-    // POST
     [HttpPost]
     public async Task<IActionResult> Create(CreateJobTitleDto dto)
     {

@@ -18,14 +18,13 @@ public class CommentsController : ControllerBase
         _environment = environment;
     }
 
-    // GET: ดึงข้อมูลทั้งหมด (เฉพาะที่ Status = 'Active' เท่านั้น เพื่อนำไปโชว์)
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
-          .Where(c => c.Status == "Active") // ✅ Logic: คัดเฉพาะที่เปิดการแสดงผล
+          .Where(c => c.Status == "Active") 
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
@@ -41,14 +40,13 @@ public class CommentsController : ControllerBase
           .ToListAsync());
     }
 
-    // GET: ดึงตาม JobTitle (เฉพาะที่ Status = 'Active')
     [HttpGet("by-jobtitle/{jobTitleId:int}")]
     public async Task<IActionResult> GetByJobTitle(int jobTitleId)
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
-          .Where(c => c.JobTitleId == jobTitleId && c.Status == "Active") // ✅ Logic: คัดเฉพาะที่เปิดการแสดงผล
+          .Where(c => c.JobTitleId == jobTitleId && c.Status == "Active") 
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
@@ -63,7 +61,6 @@ public class CommentsController : ControllerBase
           .ToListAsync());
     }
 
-    // POST: สร้างคอมเมนต์ใหม่ (Default Status = 'Active' คือโชว์เลย)
     [HttpPost]
     public async Task<IActionResult> Create([FromForm] CreateCommentDto dto)
     {
@@ -74,7 +71,6 @@ public class CommentsController : ControllerBase
 
         try
         {
-            // 1. จัดการรูปภาพ (ใช้ Default ถ้าไม่มีการอัปโหลด)
             string imagePath = "uploads/Default_pfp.jpg";
 
             if (dto.ImageFile != null && dto.ImageFile.Length > 0)
@@ -96,7 +92,6 @@ public class CommentsController : ControllerBase
                 imagePath = dto.ProfileImg;
             }
 
-            // 2. บันทึกข้อมูล
             var entity = new Comment
             {
                 JobTitleId = dto.JobTitleId,
@@ -104,7 +99,7 @@ public class CommentsController : ControllerBase
                 Name = dto.Name?.Trim(),
                 Message = dto.Message?.Trim(),
                 CreatedAt = DateTime.UtcNow.AddHours(7),
-                Status = "Active" // ✅ เริ่มต้นให้เป็น Active (โชว์ทันที)
+                Status = "Active" 
             };
 
             _context.Comments.Add(entity);
@@ -118,8 +113,6 @@ public class CommentsController : ControllerBase
         }
     }
 
-    // DELETE: ซ่อนคอมเมนต์ (เปลี่ยน Status เป็น 'inActive')
-    // การเรียก API Delete นี้ จะไม่ได้ลบข้อมูลหายไป แต่จะปิดไม่ให้แสดงผลบนหน้าเว็บ
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> HideComment(int id)
     {
@@ -128,7 +121,6 @@ public class CommentsController : ControllerBase
             var entity = await _context.Comments.FindAsync(id);
             if (entity == null) return NotFound(new { Message = "ไม่พบคอมเมนต์" });
 
-            // ✅ Logic: เปลี่ยนเป็น inActive เพื่อปิดการแสดงผล (Hide)
             entity.Status = "inActive";
 
             _context.Comments.Update(entity);

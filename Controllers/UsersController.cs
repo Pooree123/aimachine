@@ -103,7 +103,6 @@ namespace Aimachine.Controllers
             user.FullName = request.FullName;
             user.Status = request.Status;
 
-            // ✅ 3. แก้ไขให้รับค่า UpdateBy จาก DTO เพื่อบันทึกว่าใครเป็นคนแก้
             user.UpdateBy = request.UpdateBy;
 
             user.UpdateAt = DateTime.UtcNow.AddHours(7);
