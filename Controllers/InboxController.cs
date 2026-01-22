@@ -16,16 +16,18 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
-        // ✅ GET: /api/inbox?topicId=1
-        [HttpGet]
+        // ✅ GET: /api/inbox?topicId=1
+        // ดึงเฉพาะที่ Deleteflag != true (คือยังไม่ถูกลบ)
+        [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int? topicId)
         {
             try
             {
                 var query = _context.Inboxes
                   .AsNoTracking()
-                  .Include(x => x.Title) // navigation ไป Topic (ถ้าคุณตั้งชื่อไม่ใช่ Title ให้แก้)
-                            .AsQueryable();
+                  .Where(x => x.Deleteflag != true) // ✅ Filter Soft Delete
+                  .Include(x => x.Title)
+                  .AsQueryable();
 
                 if (topicId.HasValue)
                     query = query.Where(x => x.TitleId == topicId.Value);
@@ -54,8 +56,8 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ GET: /api/inbox/5
-        [HttpGet("{id:int}")]
+        // ✅ GET: /api/inbox/5
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
             try
@@ -63,7 +65,8 @@ namespace Aimachine.Controllers
                 var data = await _context.Inboxes
                   .AsNoTracking()
                   .Include(x => x.Title)
-                  .Where(x => x.Id == id)
+                  // ✅ เช็คทั้ง ID และต้องยังไม่ถูกลบ
+                  .Where(x => x.Id == id && x.Deleteflag != true)
                   .Select(x => new
                   {
                       x.Id,
@@ -89,8 +92,8 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ POST: /api/inbox
-        [HttpPost]
+        // ✅ POST: /api/inbox
+        [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateInboxDto request)
         {
             if (!ModelState.IsValid)
@@ -98,8 +101,7 @@ namespace Aimachine.Controllers
 
             try
             {
-                // เช็ค topic มีจริงไหม
-                var topicExists = await _context.Topics.AnyAsync(t => t.Id == request.TitleId);
+                var topicExists = await _context.Topics.AnyAsync(t => t.Id == request.TitleId);
                 if (!topicExists)
                     return BadRequest(new { Message = "Topic ไม่ถูกต้อง (ไม่พบในระบบ)" });
 
@@ -110,11 +112,11 @@ namespace Aimachine.Controllers
                     Message = request.Message.Trim(),
                     Phone = request.Phone?.Trim(),
                     Email = request.Email?.Trim(),
-
-                    CreatedBy = request.CreatedBy, // ถ้ามีระบบ login ค่อยดึงจาก token
-                    UpdateBy = request.CreatedBy,
+                    CreatedBy = request.CreatedBy,
+                    UpdateBy = request.CreatedBy,
                     CreatedAt = DateTime.UtcNow.AddHours(7),
-                    UpdateAt = DateTime.UtcNow.AddHours(7)
+                    UpdateAt = DateTime.UtcNow.AddHours(7),
+                    Deleteflag = false // ✅ กำหนดค่าเริ่มต้น
                 };
 
                 _context.Inboxes.Add(entity);
@@ -122,18 +124,14 @@ namespace Aimachine.Controllers
 
                 return Ok(new { Message = "เพิ่มข้อมูลสำเร็จ", Id = entity.Id });
             }
-            catch (DbUpdateException ex)
-            {
-                return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ (DbUpdateException)", Error = ex.InnerException?.Message ?? ex.Message });
-            }
             catch (Exception ex)
             {
                 return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
 
-        // ✅ PUT: /api/inbox/5
-        [HttpPut("{id:int}")]
+        // ✅ PUT: /api/inbox/5
+        [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateInboxDto request)
         {
             if (!ModelState.IsValid)
@@ -142,7 +140,8 @@ namespace Aimachine.Controllers
             try
             {
                 var entity = await _context.Inboxes.FindAsync(id);
-                if (entity == null)
+                // ต้องเช็คด้วยว่ารายการนี้ถูกลบไปแล้วหรือยัง
+                if (entity == null || entity.Deleteflag == true)
                     return NotFound(new { Message = "ไม่พบข้อมูล Inbox นี้" });
 
                 var topicExists = await _context.Topics.AnyAsync(t => t.Id == request.TitleId);
@@ -161,34 +160,32 @@ namespace Aimachine.Controllers
 
                 return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
             }
-            catch (DbUpdateException ex)
-            {
-                return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ (DbUpdateException)", Error = ex.InnerException?.Message ?? ex.Message });
-            }
             catch (Exception ex)
             {
                 return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
 
-        // ✅ DELETE: /api/inbox/5  (ลบจริง)
-        [HttpDelete("{id:int}")]
+        // ✅ DELETE: /api/inbox/5 (เปลี่ยนเป็น Soft Delete)
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
             try
             {
                 var entity = await _context.Inboxes.FindAsync(id);
-                if (entity == null)
+                if (entity == null || entity.Deleteflag == true)
                     return NotFound(new { Message = "ไม่พบข้อมูล Inbox นี้" });
 
-                _context.Inboxes.Remove(entity);
+                // ✅ เปลี่ยน Logic เป็น Soft Delete
+                entity.Deleteflag = true;
+                entity.UpdateAt = DateTime.UtcNow.AddHours(7); // อัปเดตเวลาลบด้วย
+
+                // _context.Inboxes.Remove(entity); // ❌ ไม่ใช้ Remove แล้ว
+                _context.Inboxes.Update(entity);    // ✅ ใช้ Update แทน
+
                 await _context.SaveChangesAsync();
 
-                return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
-            }
-            catch (DbUpdateException ex)
-            {
-                return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ (DbUpdateException)", Error = ex.InnerException?.Message ?? ex.Message });
+                return Ok(new { Message = "ลบข้อมูลสำเร็จ (Soft Delete)" });
             }
             catch (Exception ex)
             {

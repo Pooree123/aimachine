@@ -29,8 +29,6 @@ public partial class AimachineContext : DbContext
 
     public virtual DbSet<EventsImg> EventsImgs { get; set; }
 
-    public virtual DbSet<ExpertiseStatTag> ExpertiseStatTags { get; set; }
-
     public virtual DbSet<Inbox> Inboxes { get; set; }
 
     public virtual DbSet<Intern> Interns { get; set; }
@@ -53,11 +51,19 @@ public partial class AimachineContext : DbContext
 
     public virtual DbSet<TechStackTag> TechStackTags { get; set; }
 
+    public virtual DbSet<TechStackTag1> TechStackTags1 { get; set; }
+
     public virtual DbSet<Topic> Topics { get; set; }
 
+    // ✅ แก้ไขส่วนนี้: ลบ #warning และใส่เงื่อนไข IsConfigured
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=DESKTOP-BL4MRCB\\SQLEXPRESS04;Database=aimachine;Trusted_Connection=True;TrustServerCertificate=True;");
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            // ใส่ไว้เป็น Fallback เผื่อรันแบบไม่มี Program.cs (แต่ปกติจะอ่านจาก appsettings.json)
+            optionsBuilder.UseSqlServer("Server=DESKTOP-BL4MRCB\\SQLEXPRESS04;Database=aimachine;Trusted_Connection=True;TrustServerCertificate=True;");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -127,6 +133,10 @@ public partial class AimachineContext : DbContext
                 .HasMaxLength(255)
                 .IsUnicode(false)
                 .HasColumnName("profile_img");
+            entity.Property(e => e.Status)
+                .HasMaxLength(255)
+                .HasDefaultValue("Active") // เอาชื่อ constraint ออกเพื่อความง่าย
+                .HasColumnName("status");
 
             entity.HasOne(d => d.JobTitle).WithMany(p => p.Comments)
                 .HasForeignKey(d => d.JobTitleId)
@@ -174,7 +184,6 @@ public partial class AimachineContext : DbContext
 
             entity.HasOne(d => d.UpdateByNavigation).WithMany(p => p.CompanyProfiles)
                 .HasForeignKey(d => d.UpdateBy)
-                .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("FK__company_p__updat__7D439ABD");
         });
 
@@ -185,6 +194,7 @@ public partial class AimachineContext : DbContext
             entity.ToTable("department_types");
 
             entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.CanDelete).HasColumnName("can_delete");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(dateadd(hour,(7),getutcdate()))")
                 .HasColumnType("datetime")
@@ -305,29 +315,8 @@ public partial class AimachineContext : DbContext
 
             entity.HasOne(d => d.Events).WithMany(p => p.EventsImgs)
                 .HasForeignKey(d => d.EventsId)
-                .OnDelete(DeleteBehavior.Cascade)
+                .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__events_im__event__7C4F7684");
-        });
-
-        modelBuilder.Entity<ExpertiseStatTag>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("PK__expertis__3213E83F477F862A");
-
-            entity.ToTable("expertise_stat_tags");
-
-            entity.HasIndex(e => new { e.TechId, e.StackTagId }, "UQ__expertis__4A66D27F51C2E907").IsUnique();
-
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.StackTagId).HasColumnName("stack_tag_id");
-            entity.Property(e => e.TechId).HasColumnName("tech_id");
-
-            entity.HasOne(d => d.StackTag).WithMany(p => p.ExpertiseStatTags)
-                .HasForeignKey(d => d.StackTagId)
-                .HasConstraintName("FK__expertise__stack__14270015");
-
-            entity.HasOne(d => d.Tech).WithMany(p => p.ExpertiseStatTags)
-                .HasForeignKey(d => d.TechId)
-                .HasConstraintName("FK__expertise__tech___1332DBDC");
         });
 
         modelBuilder.Entity<Inbox>(entity =>
@@ -342,6 +331,9 @@ public partial class AimachineContext : DbContext
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.Deleteflag)
+                .HasDefaultValue(false)
+                .HasColumnName("deleteflag");
             entity.Property(e => e.Email)
                 .HasMaxLength(100)
                 .HasColumnName("email");
@@ -695,9 +687,9 @@ public partial class AimachineContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.DepartmentId).HasColumnName("department_id");
-            entity.Property(e => e.ExpertiseTitle)
+            entity.Property(e => e.TechStackTitle)
                 .HasMaxLength(100)
-                .HasColumnName("expertise_title");
+                .HasColumnName("tech_stack_title");
             entity.Property(e => e.UpdateAt)
                 .HasDefaultValueSql("(dateadd(hour,(7),getutcdate()))")
                 .HasColumnType("datetime")
@@ -716,6 +708,27 @@ public partial class AimachineContext : DbContext
             entity.HasOne(d => d.UpdateByNavigation).WithMany(p => p.TechStackTagUpdateByNavigations)
                 .HasForeignKey(d => d.UpdateBy)
                 .HasConstraintName("FK__tech_stac__updat__17036CC0");
+        });
+
+        modelBuilder.Entity<TechStackTag1>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__expertis__3213E83F477F862A");
+
+            entity.ToTable("tech_stack_tags");
+
+            entity.HasIndex(e => new { e.TechId, e.StackTagId }, "UQ__expertis__4A66D27F51C2E907").IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.StackTagId).HasColumnName("stack_tag_id");
+            entity.Property(e => e.TechId).HasColumnName("tech_id");
+
+            entity.HasOne(d => d.StackTag).WithMany(p => p.TechStackTag1s)
+                .HasForeignKey(d => d.StackTagId)
+                .HasConstraintName("FK__expertise__stack__14270015");
+
+            entity.HasOne(d => d.Tech).WithMany(p => p.TechStackTag1s)
+                .HasForeignKey(d => d.TechId)
+                .HasConstraintName("FK__expertise__tech___1332DBDC");
         });
 
         modelBuilder.Entity<Topic>(entity =>

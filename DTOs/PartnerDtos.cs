@@ -8,7 +8,6 @@ namespace Aimachine.DTOs
         [MaxLength(255)]
         public string? Image { get; set; } // เอาไว้เก็บชื่อรูป (ถ้าจำเป็น)
 
-        // ✅ เพิ่มตัวนี้เพื่อรับไฟล์รูปภาพจากการอัปโหลด
         public IFormFile? ImageFile { get; set; }
 
         [Required, MaxLength(255)]
@@ -25,7 +24,6 @@ namespace Aimachine.DTOs
         [MaxLength(255)]
         public string? Image { get; set; }
 
-        // ✅ เพิ่มตัวนี้เพื่อรับไฟล์รูปภาพใหม่ตอนแก้ไข
         public IFormFile? ImageFile { get; set; }
 
         [Required, MaxLength(255)]

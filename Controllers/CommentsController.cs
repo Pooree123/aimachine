@@ -10,7 +10,7 @@ namespace Aimachine.Controllers;
 public class CommentsController : ControllerBase
 {
     private readonly AimachineContext _context;
-    private readonly IWebHostEnvironment _environment; // ✅ เพิ่มตัวจัดการ Path
+    private readonly IWebHostEnvironment _environment;
 
     public CommentsController(AimachineContext context, IWebHostEnvironment environment)
     {
@@ -18,21 +18,22 @@ public class CommentsController : ControllerBase
         _environment = environment;
     }
 
-    // GET: all
+    // GET: ดึงข้อมูลทั้งหมด (เฉพาะที่ Status = 'Active' เท่านั้น เพื่อนำไปโชว์)
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        // สร้าง Base URL
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
+          .Where(c => c.Status == "Active") // ✅ Logic: คัดเฉพาะที่เปิดการแสดงผล
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
               c.Id,
               c.JobTitleId,
-              // ✅ เช็คถ้าเป็น path เต็มอยู่แล้ว หรือเป็น path ภายใน
-              ProfileImg = c.ProfileImg.StartsWith("http") ? c.ProfileImg : $"{baseUrl}/{c.ProfileImg}",
+              ProfileImg = !string.IsNullOrEmpty(c.ProfileImg) && c.ProfileImg.StartsWith("http")
+                           ? c.ProfileImg
+                           : (string.IsNullOrEmpty(c.ProfileImg) ? null : $"{baseUrl}/{c.ProfileImg}"),
               c.Name,
               c.Message,
               c.CreatedAt
@@ -40,19 +41,21 @@ public class CommentsController : ControllerBase
           .ToListAsync());
     }
 
-    // GET: by job title
+    // GET: ดึงตาม JobTitle (เฉพาะที่ Status = 'Active')
     [HttpGet("by-jobtitle/{jobTitleId:int}")]
     public async Task<IActionResult> GetByJobTitle(int jobTitleId)
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
-          .Where(c => c.JobTitleId == jobTitleId)
+          .Where(c => c.JobTitleId == jobTitleId && c.Status == "Active") // ✅ Logic: คัดเฉพาะที่เปิดการแสดงผล
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
               c.Id,
-              ProfileImg = c.ProfileImg.StartsWith("http") ? c.ProfileImg : $"{baseUrl}/{c.ProfileImg}",
+              ProfileImg = !string.IsNullOrEmpty(c.ProfileImg) && c.ProfileImg.StartsWith("http")
+                           ? c.ProfileImg
+                           : (string.IsNullOrEmpty(c.ProfileImg) ? null : $"{baseUrl}/{c.ProfileImg}"),
               c.Name,
               c.Message,
               c.CreatedAt
@@ -60,53 +63,48 @@ public class CommentsController : ControllerBase
           .ToListAsync());
     }
 
-    // ✅ POST (แก้ใหม่รองรับ Upload ในตัว)
+    // POST: สร้างคอมเมนต์ใหม่ (Default Status = 'Active' คือโชว์เลย)
     [HttpPost]
-    public async Task<IActionResult> Create([FromForm] CreateCommentDto dto) // เปลี่ยนเป็น FromForm
+    public async Task<IActionResult> Create([FromForm] CreateCommentDto dto)
     {
         if (dto.JobTitleId <= 0) return BadRequest(new { Message = "job_title_id ไม่ถูกต้อง" });
-        if (string.IsNullOrWhiteSpace(dto.Name)) return BadRequest(new { Message = "กรุณากรอก name" });
-        if (string.IsNullOrWhiteSpace(dto.Message)) return BadRequest(new { Message = "กรุณากรอก message" });
 
         if (!await _context.JobTitles.AnyAsync(j => j.Id == dto.JobTitleId))
             return BadRequest(new { Message = "ไม่พบ job_title นี้" });
 
         try
         {
-            // 1. กำหนดค่าเริ่มต้นเป็นภาพ Default
+            // 1. จัดการรูปภาพ (ใช้ Default ถ้าไม่มีการอัปโหลด)
             string imagePath = "uploads/Default_pfp.jpg";
 
-            // 2. ถ้ามีการอัปโหลดไฟล์มา ให้บันทึกไฟล์
             if (dto.ImageFile != null && dto.ImageFile.Length > 0)
             {
-                // กำหนดโฟลเดอร์ปลายทาง
                 string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "comments");
-
-                // ถ้าไม่มีโฟลเดอร์ ให้สร้างใหม่
                 if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
-                // ตั้งชื่อไฟล์ใหม่กันซ้ำ
                 string fileName = $"{Guid.NewGuid()}{Path.GetExtension(dto.ImageFile.FileName)}";
                 string fullPath = Path.Combine(uploadsFolder, fileName);
 
-                // บันทึกไฟล์ลงเครื่อง
                 using (var stream = new FileStream(fullPath, FileMode.Create))
                 {
                     await dto.ImageFile.CopyToAsync(stream);
                 }
-
-                // อัปเดต path ที่จะลง Database
                 imagePath = $"uploads/comments/{fileName}";
             }
+            else if (!string.IsNullOrEmpty(dto.ProfileImg))
+            {
+                imagePath = dto.ProfileImg;
+            }
 
-            // 3. บันทึกลง Database
+            // 2. บันทึกข้อมูล
             var entity = new Comment
             {
                 JobTitleId = dto.JobTitleId,
-                ProfileImg = imagePath, // ใช้ path ที่ได้จากการอัปโหลด หรือ Default
-                Name = dto.Name.Trim(),
-                Message = dto.Message.Trim(),
-                CreatedAt = DateTime.UtcNow.AddHours(7)
+                ProfileImg = imagePath,
+                Name = dto.Name?.Trim(),
+                Message = dto.Message?.Trim(),
+                CreatedAt = DateTime.UtcNow.AddHours(7),
+                Status = "Active" // ✅ เริ่มต้นให้เป็น Active (โชว์ทันที)
             };
 
             _context.Comments.Add(entity);
@@ -120,33 +118,27 @@ public class CommentsController : ControllerBase
         }
     }
 
-    // DELETE
+    // DELETE: ซ่อนคอมเมนต์ (เปลี่ยน Status เป็น 'inActive')
+    // การเรียก API Delete นี้ จะไม่ได้ลบข้อมูลหายไป แต่จะปิดไม่ให้แสดงผลบนหน้าเว็บ
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id)
+    public async Task<IActionResult> HideComment(int id)
     {
         try
         {
             var entity = await _context.Comments.FindAsync(id);
             if (entity == null) return NotFound(new { Message = "ไม่พบคอมเมนต์" });
 
-            // (Option) ลบรูปออกจากโฟลเดอร์ด้วย ถ้าไม่ใช่รูป Default
-            if (!string.IsNullOrEmpty(entity.ProfileImg) && !entity.ProfileImg.Contains("Default_pfp.jpg"))
-            {
-                var filePath = Path.Combine(_environment.WebRootPath, entity.ProfileImg);
-                if (System.IO.File.Exists(filePath))
-                {
-                    System.IO.File.Delete(filePath);
-                }
-            }
+            // ✅ Logic: เปลี่ยนเป็น inActive เพื่อปิดการแสดงผล (Hide)
+            entity.Status = "inActive";
 
-            _context.Comments.Remove(entity);
+            _context.Comments.Update(entity);
             await _context.SaveChangesAsync();
 
-            return Ok(new { Message = "ลบคอมเมนต์สำเร็จ" });
+            return Ok(new { Message = "ซ่อนคอมเมนต์สำเร็จ (Status -> inActive)" });
         }
         catch (Exception ex)
         {
-            return BadRequest(new { Message = "ลบไม่สำเร็จ", Error = ex.Message });
+            return BadRequest(new { Message = "ดำเนินการไม่สำเร็จ", Error = ex.Message });
         }
     }
 }
