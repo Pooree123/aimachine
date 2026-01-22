@@ -297,5 +297,69 @@ namespace Aimachine.Controllers
 
             return Ok(new { Message = "ลบรูปภาพสำเร็จ" });
         }
+
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] string? status)
+        {
+            try
+            {
+                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+                // ✅ Include รูป เพื่อเอา cover url และ count รูป
+                var query = _context.Solutions
+                    .AsNoTracking()
+                    .Include(s => s.SolutionImgs)
+                    .AsQueryable();
+
+                // 1) filter status (optional)
+                if (!string.IsNullOrWhiteSpace(status))
+                {
+                    var s = status.Trim();
+                    query = query.Where(x => x.Status == s);
+                }
+
+                // 2) search keyword (ไม่สนตัวเล็ก/ใหญ่)
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    var kw = q.Trim();
+                    query = query.Where(x =>
+                        EF.Functions.Collate((x.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((x.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(x => x.Id)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.DepartmentId,
+                        x.Name,
+                        x.Description,
+                        x.Status,
+                        x.CreatedAt,
+
+                        // ✅ ดึงรูปปก (Cover) ก่อน ถ้าไม่มี cover ให้เอารูปแรกแทน
+                        CoverUrl = x.SolutionImgs
+                            .OrderByDescending(img => img.IsCover)   // cover จะมาก่อน
+                            .ThenBy(img => img.Id)
+                            .Select(img => string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}")
+                            .FirstOrDefault(),
+
+                        ImagesCount = x.SolutionImgs.Count(),
+
+                      
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+
     }
 }

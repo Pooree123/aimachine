@@ -232,5 +232,59 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] string? status)
+        {
+            try
+            {
+                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+                var query = _context.Partners
+                    .AsNoTracking()
+                    .Where(x => x.Status != "Deleted")
+                    .AsQueryable();
+
+                // 1) Filter ตามสถานะ (ถ้าส่งมา)
+                if (!string.IsNullOrWhiteSpace(status))
+                {
+                    var s = status.Trim();
+                    query = query.Where(x => x.Status == s);
+                }
+
+                // 2) Search keyword (ไม่สนตัวเล็ก/ใหญ่)
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    var kw = q.Trim();
+
+                    // ✅ วิธีแนะนำสำหรับ SQL Server: ใช้ Collation ให้เป็น case-insensitive
+                    // (ถ้าฐานข้อมูลคุณตั้ง CI อยู่แล้ว อันนี้ก็ยังใช้ได้)
+                    query = query.Where(x =>
+                        EF.Functions.Collate(x.Name, "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(x => x.Id)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
+                        x.Name,
+                        x.Status,
+                        x.CreatedBy,
+                        CreatedByName = x.CreatedByNavigation != null ? x.CreatedByNavigation.FullName : null,
+                        x.UpdateBy,
+                        UpdateByName = x.UpdateByNavigation != null ? x.UpdateByNavigation.FullName : null,
+                        x.CreatedAt,
+                        x.UpdateAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
     }
 }
