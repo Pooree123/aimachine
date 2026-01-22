@@ -16,7 +16,6 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
-        // ✅ GET: /api/topic
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -44,7 +43,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ GET: /api/topic/5
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -75,7 +73,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ POST: /api/topic
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateTopicDto request)
         {
@@ -84,7 +81,6 @@ namespace Aimachine.Controllers
 
             try
             {
-                // 1. ตรวจสอบว่า Admin ที่สร้าง มีอยู่จริงหรือไม่
                 if (request.CreatedBy.HasValue)
                 {
                     var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.CreatedBy.Value);
@@ -126,7 +122,7 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ PUT: /api/topic/5
+
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateTopicDto request)
         {
@@ -139,7 +135,7 @@ namespace Aimachine.Controllers
                 if (entity == null)
                     return NotFound(new { Message = "ไม่พบ Topic นี้" });
 
-                // 1. ตรวจสอบว่า Admin ที่แก้ไข มีอยู่จริงหรือไม่
+
                 if (request.UpdateBy.HasValue)
                 {
                     var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.UpdateBy.Value);
@@ -148,7 +144,6 @@ namespace Aimachine.Controllers
 
                 var title = request.TopicTitle.Trim();
 
-                // 2. เช็คชื่อซ้ำ (ต้องไม่ซ้ำกับ ID อื่น)
                 var duplicate = await _context.Topics.AnyAsync(t => t.Id != id && t.TopicTitle == title);
                 if (duplicate)
                     return BadRequest(new { Message = "ชื่อ Topic ซ้ำกับรายการอื่น" });
@@ -175,7 +170,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ DELETE: /api/topic/5
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -192,7 +186,6 @@ namespace Aimachine.Controllers
             }
             catch (DbUpdateException ex)
             {
-                // ดักจับ Error กรณีลบไม่ได้เพราะถูกตารางอื่น (เช่น Inbox) ใช้งานอยู่
                 return BadRequest(new
                 {
                     Message = "ลบข้อมูลไม่สำเร็จ (เนื่องจาก Topic นี้ถูกใช้งานอยู่ในระบบ)",

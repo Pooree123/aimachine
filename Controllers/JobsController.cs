@@ -16,9 +16,6 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
-        // =============================================
-        // ✅ GET: ดึงข้อมูลงานทั้งหมด
-        // =============================================
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -36,12 +33,9 @@ namespace Aimachine.Controllers
                     j.DateOpen,
                     j.DateEnd,
 
-                    // ✅ แก้ไข 1: ดึง JobTitle ให้ตรงกับ Model (JobsTitle)
                     j.JobTitleId,
                     JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
 
-                    // ✅ แก้ไข 2: ดึง Tag ID ให้ตรงกับ Model (StackTagId)
-                    // ใช้ ?? 0 เพื่อกันค่า Null เพราะใน DB เป็น int?
                     TechStackTagIds = j.JobsTags.Select(t => t.StackTagId ?? 0).ToList(),
 
                     j.CreatedAt,
@@ -52,9 +46,6 @@ namespace Aimachine.Controllers
             return Ok(data);
         }
 
-        // =============================================
-        // ✅ GET: ดึงตาม ID
-        // =============================================
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -73,10 +64,9 @@ namespace Aimachine.Controllers
                     j.DateEnd,
 
                     j.JobTitleId,
-                    // ✅ แก้ไขชื่อตัวแปร
+
                     JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
 
-                    // ✅ แก้ไขชื่อตัวแปร FK
                     TechStackTagIds = j.JobsTags.Select(t => t.StackTagId ?? 0).ToList(),
 
                     j.CreatedAt,
@@ -89,9 +79,6 @@ namespace Aimachine.Controllers
             return Ok(job);
         }
 
-        // =============================================
-        // ✅ POST: เพิ่มประกาศงานใหม่
-        // =============================================
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateJobDto dto)
         {
@@ -115,7 +102,6 @@ namespace Aimachine.Controllers
             _context.Jobs.Add(entity);
             await _context.SaveChangesAsync();
 
-            // ✅ บันทึก Tags
             if (dto.TechStackTagIds != null && dto.TechStackTagIds.Count > 0)
             {
                 foreach (var tagId in dto.TechStackTagIds)
@@ -124,7 +110,6 @@ namespace Aimachine.Controllers
                     {
                         JobId = entity.Id,
 
-                        // ✅ แก้ไข 3: ใช้ชื่อ StackTagId ให้ตรงกับ Model
                         StackTagId = tagId
                     };
                     _context.JobsTags.Add(jobTag);
@@ -135,9 +120,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "สร้างประกาศงานสำเร็จ", Id = entity.Id });
         }
 
-        // =============================================
-        // ✅ PUT: แก้ไขข้อมูล
-        // =============================================
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateJobDto dto)
         {
@@ -150,7 +132,6 @@ namespace Aimachine.Controllers
                     return BadRequest(new { Message = "ไม่พบ JobTitle ID ใหม่ที่ระบุ" });
             }
 
-            // อัปเดตข้อมูล
             entity.JobTitleId = dto.JobTitleId;
             entity.Description = dto.Description;
             entity.TotalPositions = dto.TotalPositions;
@@ -160,7 +141,6 @@ namespace Aimachine.Controllers
             entity.UpdateBy = dto.UpdateBy;
             entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
-            // อัปเดต Tags
             if (dto.TechStackTagIds != null)
             {
                 var oldTags = _context.JobsTags.Where(x => x.JobId == id);
@@ -171,7 +151,6 @@ namespace Aimachine.Controllers
                     var jobTag = new JobsTag
                     {
                         JobId = entity.Id,
-                        // ✅ แก้ไข 4: ใช้ชื่อ StackTagId
                         StackTagId = tagId
                     };
                     _context.JobsTags.Add(jobTag);
@@ -182,9 +161,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
         }
 
-        // =============================================
-        // ✅ DELETE
-        // =============================================
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
