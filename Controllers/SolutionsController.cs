@@ -37,12 +37,18 @@ namespace Aimachine.Controllers
                     s.Description,
                     s.Status,
                     DepartmentName = s.Department != null ? s.Department.DepartmentTitle : "",
-                    Images = s.SolutionImgs.Select(img => new
-                    {
-                        img.Id,
-                        Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
-                        img.IsCover
-                    }).OrderByDescending(i => i.IsCover).ToList(),
+
+                    // ✅ แก้ตรงนี้: เพิ่ม .Where เพื่อกรองเอาเฉพาะ IsCover == true
+                    Images = s.SolutionImgs
+                        .Where(img => img.IsCover == true) // <--- กรองตรงนี้
+                        .Select(img => new
+                        {
+                            img.Id,
+                            Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
+                            img.IsCover
+                        })
+                        .ToList(), // จะได้ List ที่มีแค่รูปปกรูปเดียว
+
                     s.CreatedAt,
                     s.UpdateAt
                 })

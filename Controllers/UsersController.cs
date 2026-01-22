@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BCrypt.Net;
 using System;
-using System.IdentityModel.Tokens.Jwt; // ✅ เพิ่ม
-using System.Security.Claims;          // ✅ เพิ่ม
-using Microsoft.IdentityModel.Tokens;  // ✅ เพิ่ม
-using System.Text;                     // ✅ เพิ่ม
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Aimachine.Controllers
@@ -17,9 +17,8 @@ namespace Aimachine.Controllers
     public class UsersController : ControllerBase
     {
         private readonly AimachineContext _context;
-        private readonly IConfiguration _configuration; // ✅ 1. เพิ่มตัวแปรรับ Config
+        private readonly IConfiguration _configuration;
 
-        // ✅ 2. เพิ่ม IConfiguration ใน Constructor
         public UsersController(AimachineContext context, IConfiguration configuration)
         {
             _context = context;
@@ -60,6 +59,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
+        // [Authorize] // ⚠️ เปิดกลับมาหลังจากสร้าง Admin คนแรกเสร็จแล้ว
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
             if (await _context.AdminUsers.AnyAsync(u => u.Username == request.Username))
@@ -76,7 +76,13 @@ namespace Aimachine.Controllers
                 FullName = request.FullName,
                 Status = "Active",
                 Deleteflag = false,
-                CreatedBy = 1,
+
+                // ✅ 1. แก้ไขให้รับค่า CreatedBy จาก DTO
+                CreatedBy = request.CreatedBy,
+
+                // ✅ 2. ตั้งค่า UpdateBy เป็นคนเดียวกับคนสร้าง (สำหรับครั้งแรก)
+                UpdateBy = request.CreatedBy,
+
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
             };
@@ -96,6 +102,10 @@ namespace Aimachine.Controllers
 
             user.FullName = request.FullName;
             user.Status = request.Status;
+
+            // ✅ 3. แก้ไขให้รับค่า UpdateBy จาก DTO เพื่อบันทึกว่าใครเป็นคนแก้
+            user.UpdateBy = request.UpdateBy;
+
             user.UpdateAt = DateTime.UtcNow.AddHours(7);
 
             await _context.SaveChangesAsync();
@@ -116,7 +126,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ลบผู้ใช้งานสำเร็จ (Soft Delete)" });
         }
 
-        // ✅ 3. แก้ไขฟังก์ชัน Login ให้ส่ง Token
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto request)
         {
@@ -128,34 +137,30 @@ namespace Aimachine.Controllers
                 return Unauthorized("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
             }
 
-            // --- เริ่มต้นส่วนการสร้าง Token ---
             var tokenHandler = new JwtSecurityTokenHandler();
-            // ดึง Key จาก appsettings.json (ต้องตรงกับที่ตั้งไว้ใน Program.cs)
             var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]);
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                // ใส่ข้อมูล Payload (Claims) เช่น ID, Username
                 Subject = new ClaimsIdentity(new[]
                 {
                     new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                    new Claim(ClaimTypes.Name, user.Username),
+                    new Claim("FullName", user.FullName ?? "")
                 }),
-                // กำหนดวันหมดอายุ (เช่น 1 วัน)
                 Expires = DateTime.UtcNow.AddDays(1),
                 Issuer = _configuration["Jwt:Issuer"],
                 Audience = _configuration["Jwt:Audience"],
-                // เซ็นลายเซ็นด้วย Key
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
             };
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
-            // --- จบส่วนการสร้าง Token ---
 
             return Ok(new
             {
                 Message = "เข้าสู่ระบบสำเร็จ",
-                Token = tokenString, // ✅ ส่ง Token กลับไปให้ Frontend
+                Token = tokenString,
                 UserId = user.Id,
                 FullName = user.FullName
             });
