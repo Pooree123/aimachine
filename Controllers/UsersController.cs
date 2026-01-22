@@ -4,8 +4,11 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BCrypt.Net;
 using System;
-using Aimachine.DTOs;
-using Aimachine.Models; // อย่าลืมเปลี่ยนเป็น namespace ของคุณ
+using System.IdentityModel.Tokens.Jwt; // ✅ เพิ่ม
+using System.Security.Claims;          // ✅ เพิ่ม
+using Microsoft.IdentityModel.Tokens;  // ✅ เพิ่ม
+using System.Text;                     // ✅ เพิ่ม
+using Microsoft.AspNetCore.Authorization;
 
 namespace Aimachine.Controllers
 {
@@ -14,17 +17,21 @@ namespace Aimachine.Controllers
     public class UsersController : ControllerBase
     {
         private readonly AimachineContext _context;
+        private readonly IConfiguration _configuration; // ✅ 1. เพิ่มตัวแปรรับ Config
 
-        public UsersController(AimachineContext context)
+        // ✅ 2. เพิ่ม IConfiguration ใน Constructor
+        public UsersController(AimachineContext context, IConfiguration configuration)
         {
             _context = context;
+            _configuration = configuration;
         }
 
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> GetAllUsers()
         {
             var users = await _context.AdminUsers
-                .Where(u => u.Deleteflag == false) // กรองคนที่โดนลบออก
+                .Where(u => u.Deleteflag == false)
                 .Select(u => new
                 {
                     u.Id,
@@ -39,6 +46,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpGet("{id}")]
+        [Authorize]
         public async Task<IActionResult> GetUserById(int id)
         {
             var user = await _context.AdminUsers
@@ -54,7 +62,6 @@ namespace Aimachine.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
-            // 1. เช็คว่า Username ซ้ำไหม
             if (await _context.AdminUsers.AnyAsync(u => u.Username == request.Username))
             {
                 return BadRequest("Username นี้มีคนใช้แล้ว");
@@ -62,15 +69,14 @@ namespace Aimachine.Controllers
 
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
-            // 3. สร้าง Object ลง DB
             var newUser = new AdminUser
             {
                 Username = request.Username,
-                PasswordHash = passwordHash, // เก็บตัวที่ Hash แล้ว
+                PasswordHash = passwordHash,
                 FullName = request.FullName,
-                Status = "Active", // ค่าเริ่มต้น
+                Status = "Active",
                 Deleteflag = false,
-                CreatedBy = 1, // สมมติใส่ ID Admin ที่สร้างไปก่อน
+                CreatedBy = 1,
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
             };
@@ -81,8 +87,8 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "สร้าง User สำเร็จ", UserId = newUser.Id });
         }
 
-        // 4. PUT: แก้ไขข้อมูล
         [HttpPut("{id}")]
+        [Authorize]
         public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto request)
         {
             var user = await _context.AdminUsers.FindAsync(id);
@@ -97,6 +103,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize]
         public async Task<IActionResult> DeleteUser(int id)
         {
             var user = await _context.AdminUsers.FindAsync(id);
@@ -109,27 +116,46 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ลบผู้ใช้งานสำเร็จ (Soft Delete)" });
         }
 
+        // ✅ 3. แก้ไขฟังก์ชัน Login ให้ส่ง Token
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto request)
         {
             var user = await _context.AdminUsers
                 .FirstOrDefaultAsync(u => u.Username == request.Username && u.Deleteflag == false);
 
-            if (user == null)
+            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             {
                 return Unauthorized("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
             }
 
-            bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+            // --- เริ่มต้นส่วนการสร้าง Token ---
+            var tokenHandler = new JwtSecurityTokenHandler();
+            // ดึง Key จาก appsettings.json (ต้องตรงกับที่ตั้งไว้ใน Program.cs)
+            var key = Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]);
 
-            if (!isPasswordValid)
+            var tokenDescriptor = new SecurityTokenDescriptor
             {
-                return Unauthorized("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
-            }
+                // ใส่ข้อมูล Payload (Claims) เช่น ID, Username
+                Subject = new ClaimsIdentity(new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                }),
+                // กำหนดวันหมดอายุ (เช่น 1 วัน)
+                Expires = DateTime.UtcNow.AddDays(1),
+                Issuer = _configuration["Jwt:Issuer"],
+                Audience = _configuration["Jwt:Audience"],
+                // เซ็นลายเซ็นด้วย Key
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            };
+
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            var tokenString = tokenHandler.WriteToken(token);
+            // --- จบส่วนการสร้าง Token ---
 
             return Ok(new
             {
                 Message = "เข้าสู่ระบบสำเร็จ",
+                Token = tokenString, // ✅ ส่ง Token กลับไปให้ Frontend
                 UserId = user.Id,
                 FullName = user.FullName
             });

@@ -55,9 +55,15 @@ public partial class AimachineContext : DbContext
 
     public virtual DbSet<Topic> Topics { get; set; }
 
+    // ✅ แก้ไขส่วนนี้: ลบ #warning และใส่เงื่อนไข IsConfigured
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-        => optionsBuilder.UseSqlServer("Server=DESKTOP-BL4MRCB\\SQLEXPRESS04;Database=aimachine;Trusted_Connection=True;TrustServerCertificate=True;");
+    {
+        if (!optionsBuilder.IsConfigured)
+        {
+            // ใส่ไว้เป็น Fallback เผื่อรันแบบไม่มี Program.cs (แต่ปกติจะอ่านจาก appsettings.json)
+            optionsBuilder.UseSqlServer("Server=DESKTOP-BL4MRCB\\SQLEXPRESS04;Database=aimachine;Trusted_Connection=True;TrustServerCertificate=True;");
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -129,7 +135,7 @@ public partial class AimachineContext : DbContext
                 .HasColumnName("profile_img");
             entity.Property(e => e.Status)
                 .HasMaxLength(255)
-                .HasDefaultValue("Active", "DF_comments_status")
+                .HasDefaultValue("Active") // เอาชื่อ constraint ออกเพื่อความง่าย
                 .HasColumnName("status");
 
             entity.HasOne(d => d.JobTitle).WithMany(p => p.Comments)
@@ -326,7 +332,7 @@ public partial class AimachineContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.Deleteflag)
-                .HasDefaultValue(false, "DF_inbox_deleteflag")
+                .HasDefaultValue(false)
                 .HasColumnName("deleteflag");
             entity.Property(e => e.Email)
                 .HasMaxLength(100)
