@@ -17,6 +17,8 @@ public partial class DepartmentType
 
     public DateTime? UpdateAt { get; set; }
 
+    public bool? CanDelete { get; set; }
+
     public virtual AdminUser? CreatedByNavigation { get; set; }
 
     public virtual ICollection<JobTitle> JobTitles { get; set; } = new List<JobTitle>();

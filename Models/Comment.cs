@@ -17,5 +17,7 @@ public partial class Comment
 
     public DateTime? CreatedAt { get; set; }
 
+    public string Status { get; set; } = null!;
+
     public virtual JobTitle JobTitle { get; set; } = null!;
 }

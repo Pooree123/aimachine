@@ -127,6 +127,10 @@ public partial class AimachineContext : DbContext
                 .HasMaxLength(255)
                 .IsUnicode(false)
                 .HasColumnName("profile_img");
+            entity.Property(e => e.Status)
+                .HasMaxLength(255)
+                .HasDefaultValue("Active", "DF_comments_status")
+                .HasColumnName("status");
 
             entity.HasOne(d => d.JobTitle).WithMany(p => p.Comments)
                 .HasForeignKey(d => d.JobTitleId)
@@ -184,6 +188,7 @@ public partial class AimachineContext : DbContext
             entity.ToTable("department_types");
 
             entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.CanDelete).HasColumnName("can_delete");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(dateadd(hour,(7),getutcdate()))")
                 .HasColumnType("datetime")
@@ -320,6 +325,9 @@ public partial class AimachineContext : DbContext
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+            entity.Property(e => e.Deleteflag)
+                .HasDefaultValue(false, "DF_inbox_deleteflag")
+                .HasColumnName("deleteflag");
             entity.Property(e => e.Email)
                 .HasMaxLength(100)
                 .HasColumnName("email");
