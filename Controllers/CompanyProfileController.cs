@@ -12,12 +12,13 @@ public class CompanyProfileController : ControllerBase
     private readonly AimachineContext _context;
     public CompanyProfileController(AimachineContext context) => _context = context;
 
-    // GET: ข้อมูลบริษัท (แนะนำให้มีแถวเดียว)
-    [HttpGet]
+    // GET: api/companyprofile
+    [HttpGet]
     public async Task<IActionResult> Get()
     {
+        // แก้ไข: เพิ่ม Where(x => x.Id == 1) เพื่อดึงเฉพาะ ID 1
         var cp = await _context.CompanyProfiles.AsNoTracking()
-          .OrderBy(x => x.Id)
+          .Where(x => x.Id == 1)
           .Select(x => new {
               x.Id,
               x.CompannyName,
@@ -33,18 +34,22 @@ public class CompanyProfileController : ControllerBase
           })
           .FirstOrDefaultAsync();
 
-        if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile" });
+        if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile (ID 1)" });
         return Ok(cp);
     }
 
-    // PUT: อัปเดตข้อมูลบริษัท
-    [HttpPut("{id:int}")]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateCompanyProfileDto dto)
+    // PUT: api/companyprofile
+    // แก้ไข: เอา {id} ออกจาก Route เพราะเราจะ fix เป็น 1 ข้างใน
+    [HttpPut]
+    public async Task<IActionResult> Update([FromBody] UpdateCompanyProfileDto dto)
     {
         try
         {
-            var cp = await _context.CompanyProfiles.FindAsync(id);
-            if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile" });
+            // แก้ไข: Fix ID เป็น 1 เสมอ
+            int fixedId = 1;
+            var cp = await _context.CompanyProfiles.FindAsync(fixedId);
+
+            if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile (ID 1)" });
 
             if (dto.UpdateBy.HasValue && !await _context.AdminUsers.AnyAsync(a => a.Id == dto.UpdateBy.Value))
                 return BadRequest(new { Message = "update_by ไม่ถูกต้อง (ไม่พบ admin_users)" });
