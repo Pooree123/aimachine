@@ -305,57 +305,53 @@ namespace Aimachine.Controllers
         }
 
 
+        // ✅ GET: /api/solutions/search?q=...&departmentId=1
         [HttpGet("search")]
-        public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] string? status)
+        public async Task<IActionResult> Search([FromQuery] SolutionSearchQueryDto req)
         {
             try
             {
                 var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
-                // ✅ Include รูป เพื่อเอา cover url และ count รูป
                 var query = _context.Solutions
                     .AsNoTracking()
                     .Include(s => s.SolutionImgs)
                     .AsQueryable();
 
-                // 1) filter status (optional)
-                if (!string.IsNullOrWhiteSpace(status))
-                {
-                    var s = status.Trim();
-                    query = query.Where(x => x.Status == s);
-                }
+                // ✅ 0) Filter Department (ถ้าส่งมา)
+                    if (req.DepartmentId.HasValue)
+                    {
+                        query = query.Where(s => s.DepartmentId == req.DepartmentId.Value);
+                    }
 
-                // 2) search keyword (ไม่สนตัวเล็ก/ใหญ่)
-                if (!string.IsNullOrWhiteSpace(q))
+                // ✅ 1) Search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+                if (!string.IsNullOrWhiteSpace(req.Q))
                 {
-                    var kw = q.Trim();
-                    query = query.Where(x =>
-                        EF.Functions.Collate((x.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
-                        EF.Functions.Collate((x.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    var kw = req.Q.Trim();
+                    query = query.Where(s =>
+                        EF.Functions.Collate((s.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((s.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
                     );
                 }
 
                 var data = await query
-                    .OrderByDescending(x => x.Id)
-                    .Select(x => new
+                    .OrderByDescending(s => s.Id)
+                    .Select(s => new
                     {
-                        x.Id,
-                        x.DepartmentId,
-                        x.Name,
-                        x.Description,
-                        x.Status,
-                        x.CreatedAt,
+                        s.Id,
+                        s.DepartmentId,
+                        s.Name,
+                        s.Description,
+                        s.Status,
+                        s.CreatedAt,
 
-                        // ✅ ดึงรูปปก (Cover) ก่อน ถ้าไม่มี cover ให้เอารูปแรกแทน
-                        CoverUrl = x.SolutionImgs
-                            .OrderByDescending(img => img.IsCover)   // cover จะมาก่อน
+                        CoverUrl = s.SolutionImgs
+                            .OrderByDescending(img => img.IsCover)
                             .ThenBy(img => img.Id)
                             .Select(img => string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}")
                             .FirstOrDefault(),
 
-                        ImagesCount = x.SolutionImgs.Count(),
-
-                      
+                        ImagesCount = s.SolutionImgs.Count()
                     })
                     .ToListAsync();
 
@@ -366,6 +362,7 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
             }
         }
+
 
     }
 }

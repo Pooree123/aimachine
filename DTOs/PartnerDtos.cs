@@ -34,4 +34,9 @@ namespace Aimachine.DTOs
 
         public int? UpdateBy { get; set; }
     }
+
+    public class PartnerSearchQueryDto
+    {
+        public string? Q { get; set; } // คำค้นหา
+    }
 }

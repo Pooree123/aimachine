@@ -127,5 +127,52 @@ namespace Aimachine.Controllers
 
 			return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
 		}
-	}
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] TechStackTagSearchQueryDto req)
+        {
+            try
+            {
+                var query = _context.TechStackTags
+                    .AsNoTracking()
+                    .Include(t => t.Department)
+                    .AsQueryable();
+
+                // 1) filter departmentId (optional)
+                if (req.DepartmentId.HasValue)
+                    query = query.Where(t => t.DepartmentId == req.DepartmentId.Value);
+
+                // 2) search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+                if (!string.IsNullOrWhiteSpace(req.Q))
+                {
+                    var kw = req.Q.Trim();
+
+                    query = query.Where(t =>
+                        EF.Functions.Collate((t.TechStackTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                        || (t.Department != null &&
+                            EF.Functions.Collate((t.Department.DepartmentTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw))
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(t => t.Id)
+                    .Select(t => new
+                    {
+                        t.Id,
+                        t.TechStackTitle,
+                        t.DepartmentId,
+                        DepartmentName = t.Department != null ? t.Department.DepartmentTitle : "",
+                        t.CreatedAt,
+                        t.UpdateAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+    }
 }

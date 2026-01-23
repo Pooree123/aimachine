@@ -8,8 +8,6 @@ namespace Aimachine.DTOs
         public string EventTitle { get; set; } = string.Empty;
 
         public int? CreatedBy { get; set; }
-
-        public string? Status { get; set; } = "Active"; // ถ้าตารางมี status
     }
 
     public class UpdateEventCategoryDto
@@ -18,7 +16,11 @@ namespace Aimachine.DTOs
         public string EventTitle { get; set; } = string.Empty;
 
         public int? UpdateBy { get; set; }
+    }
 
-        public string? Status { get; set; } // ถ้าตารางมี status
+    public class EventCategoryDropdownDto
+    {
+        public int Value { get; set; } // เปลี่ยนจาก Id เป็น Value
+        public string Label { get; set; } = string.Empty; // เปลี่ยนจาก EventTitle เป็น Label
     }
 }

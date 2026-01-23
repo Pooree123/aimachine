@@ -17,4 +17,15 @@ namespace Aimachine.DTOs
 
         public int? UpdateBy { get; set; }
     }
+
+    public class TopicSearchQueryDto
+    {
+        public string? Q { get; set; }
+    }
+
+    public class TopicDropdownDto
+    {
+        public int Value { get; set; }
+        public string Label { get; set; } = string.Empty;
+    }
 }

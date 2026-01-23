@@ -24,7 +24,7 @@ public class CommentsController : ControllerBase
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
-          .Where(c => c.Status == "Active") 
+          .Where(c => c.Status == "Deleted") 
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
@@ -133,4 +133,66 @@ public class CommentsController : ControllerBase
             return BadRequest(new { Message = "ดำเนินการไม่สำเร็จ", Error = ex.Message });
         }
     }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] CommentSearchQueryDto req)
+    {
+        try
+        {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+            var query = _context.Comments
+                .AsNoTracking()
+                .AsQueryable();
+
+            // 1) Filter jobTitleId (optional)
+            if (req.JobTitleId.HasValue)
+                query = query.Where(c => c.JobTitleId == req.JobTitleId.Value);
+
+            // 2) Filter date (optional) เทียบเฉพาะวัน
+            if (req.Date.HasValue)
+            {
+                var d = req.Date.Value.Date;
+                var next = d.AddDays(1);
+                query = query.Where(c => c.CreatedAt >= d && c.CreatedAt < next);
+            }
+
+            // 3) Search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+            if (!string.IsNullOrWhiteSpace(req.Q))
+            {
+                var kw = req.Q.Trim();
+                query = query.Where(c =>
+                    EF.Functions.Collate((c.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                    EF.Functions.Collate((c.Message ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                );
+            }
+
+            var data = await query
+                .OrderByDescending(c => c.Id)
+                .Select(c => new
+                {
+                    c.Id,
+                    c.JobTitleId,
+
+                    ProfileImg = !string.IsNullOrEmpty(c.ProfileImg) && c.ProfileImg.StartsWith("http")
+                        ? c.ProfileImg
+                        : (string.IsNullOrEmpty(c.ProfileImg) ? null : $"{baseUrl}/{c.ProfileImg}"),
+
+                    Name = c.Name,
+                    Message = c.Message,
+
+                    c.Status,
+                    c.CreatedAt,
+                    
+                })
+                .ToListAsync();
+
+            return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+        }
+    }
+
 }

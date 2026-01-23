@@ -1,6 +1,7 @@
 ﻿using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Aimachine.DTOs;
 
 namespace Aimachine.Controllers
 {
@@ -61,62 +62,76 @@ namespace Aimachine.Controllers
         // ✅ POST: /api/event-categories
         // body: { "eventTitle": "Christmasday", "createdBy": 1 }
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] EventCategory body)
+        public async Task<IActionResult> Create([FromBody] CreateEventCategoryDto body) // เปลี่ยนมารับค่าจาก DTO
         {
-            if (string.IsNullOrWhiteSpace(body.EventTitle))
-                return BadRequest(new { Message = "EventTitle ห้ามว่าง" });
-
-            var now = DateTime.UtcNow.AddHours(7);
-
-            var entity = new EventCategory
+            // ตรวจสอบความถูกต้องของข้อมูล (Validation)
+            if (!ModelState.IsValid)
             {
-                EventTitle = body.EventTitle.Trim(),
-                CreatedBy = body.CreatedBy,
-                UpdateBy = body.CreatedBy,
-                CreatedAt = now,
-                UpdateAt = now
-            };
+                return BadRequest(ModelState);
+            }
 
-            _context.EventCategories.Add(entity);
-            await _context.SaveChangesAsync();
+            try
+            {
+                var now = DateTime.UtcNow.AddHours(7);
 
-            return Ok(new { Message = "เพิ่ม Category สำเร็จ", Id = entity.Id });
+                // Map ค่าจาก DTO ไปยัง Entity เพื่อเตรียมบันทึกลงฐานข้อมูล
+                var entity = new EventCategory
+                {
+                    EventTitle = body.EventTitle.Trim(),
+                    CreatedBy = body.CreatedBy,
+                    UpdateBy = body.CreatedBy, // เริ่มต้นให้ค่า UpdateBy เท่ากับคนสร้าง
+                    CreatedAt = now,
+                    UpdateAt = now
+                };
+
+                _context.EventCategories.Add(entity);
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    Message = "เพิ่ม Category สำเร็จ",
+                    Id = entity.Id
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new
+                {
+                    Message = "เพิ่มข้อมูลไม่สำเร็จ",
+                    Error = ex.Message
+                });
+            }
         }
 
         // ✅ PUT: /api/event-categories/5
         // body: { "eventTitle": "New Year", "updateBy": 1 }
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] EventCategory body)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateEventCategoryDto body) // เปลี่ยนจาก EventCategory เป็น DTO
         {
-            var entity = await _context.EventCategories.FindAsync(id);
-            if (entity == null) return NotFound(new { Message = "ไม่พบ Category" });
+            // ตรวจสอบความถูกต้องของข้อมูลตามที่ระบุใน DTO (เช่น [Required])
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-            if (string.IsNullOrWhiteSpace(body.EventTitle))
-                return BadRequest(new { Message = "EventTitle ห้ามว่าง" });
+            try
+            {
+                var entity = await _context.EventCategories.FindAsync(id);
+                if (entity == null)
+                    return NotFound(new { Message = "ไม่พบ Category" });
 
-            entity.EventTitle = body.EventTitle.Trim();
-            entity.UpdateBy = body.UpdateBy;
-            entity.UpdateAt = DateTime.UtcNow.AddHours(7);
+                // อัปเดตข้อมูลจาก DTO ลงใน Entity
+                entity.EventTitle = body.EventTitle.Trim();
+                entity.UpdateBy = body.UpdateBy;
+                entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
-            await _context.SaveChangesAsync();
-            return Ok(new { Message = "แก้ไข Category สำเร็จ" });
-        }
-
-        // ✅ DELETE: /api/event-categories/5
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            var entity = await _context.EventCategories.FindAsync(id);
-            if (entity == null) return NotFound(new { Message = "ไม่พบ Category" });
-
-            var used = await _context.Events.AnyAsync(e => e.CategoryId == id);
-            if (used)
-                return BadRequest(new { Message = "ลบไม่ได้: Category นี้ถูกใช้อยู่ใน Events" });
-
-            _context.EventCategories.Remove(entity);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = "ลบ Category สำเร็จ" });
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "แก้ไข Category สำเร็จ" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
+            }
         }
 
         // ✅ GET: /api/event-categories/search?q=chr
@@ -157,21 +172,33 @@ namespace Aimachine.Controllers
         [HttpGet("dropdown")]
         public async Task<IActionResult> GetDropdown()
         {
-            var data = await _context.EventCategories
-                .AsNoTracking()
-                .OrderBy(x => x.EventTitle)
-                .Select(x => new
-                {
-                    x.Id,
-                    x.EventTitle
-                })
-                .ToListAsync();
-
-            return Ok(new
+            try
             {
-                Message = "ดึงข้อมูล Category สำหรับ Dropdown สำเร็จ",
-                Data = data
-            });
+                var data = await _context.EventCategories
+                    .AsNoTracking()
+                    .OrderBy(x => x.EventTitle) // เรียงลำดับตามตัวอักษร
+                    .Select(x => new EventCategoryDropdownDto
+                    {
+                        Value = x.Id,
+                        Label = x.EventTitle ?? "ไม่ระบุหัวข้อ" // จัดการกรณีข้อมูลเป็น Null
+                    })
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    Message = "ดึงข้อมูล Category สำหรับ Dropdown สำเร็จ",
+                    Data = data
+                });
+            }
+            catch (Exception ex)
+            {
+                // ส่งข้อความ Error กลับไปเพื่อให้รู้ว่าเกิดปัญหาที่จุดไหน
+                return BadRequest(new
+                {
+                    Message = "เกิดข้อผิดพลาดในการโหลดข้อมูล",
+                    Error = ex.Message
+                });
+            }
         }
 
     }

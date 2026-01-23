@@ -18,4 +18,11 @@ namespace Aimachine.DTOs
 
         public string? ProfileImg { get; set; }
     }
+
+    public class CommentSearchQueryDto
+    {
+        public string? Q { get; set; }
+        public DateTime? Date { get; set; }
+        public int? JobTitleId { get; set; } // ✅ filter จาก dropdown
+    }
 }

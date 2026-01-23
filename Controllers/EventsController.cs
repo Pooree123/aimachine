@@ -118,93 +118,111 @@ namespace Aimachine.Controllers
         // ✅ POST: /api/events  (สร้าง event + อัปโหลดรูปหลายรูป)
         [HttpPost]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> Create(
-            [FromForm] int categoryId,
-            [FromForm] string events,
-            [FromForm] string? location,
-            [FromForm] DateTime eventDate,
-            [FromForm] string? description,
-            [FromForm] string? status,
-            [FromForm] int? createdBy,
-            [FromForm] List<IFormFile>? images
-        )
+        public async Task<IActionResult> Create([FromForm] CreateEventDto body) // ใช้ DTO ตัวเดียวรับค่าทั้งหมด
         {
-            if (string.IsNullOrWhiteSpace(events))
-                return BadRequest(new { Message = "Event Name ห้ามว่าง" });
-
-            if (!string.IsNullOrWhiteSpace(status) && status != "Active" && status != "inActive")
-                return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
-
-            var now = DateTime.UtcNow.AddHours(7);
-
-            var entity = new Event
+            // 1. ตรวจสอบ Validation ตามที่กำหนดไว้ใน DTO (เช่น [Required], [MaxLength])
+            if (!ModelState.IsValid)
             {
-                CategoryId = categoryId,
-                Events = events.Trim(),
-                Location = location?.Trim(),
-                EventDate = eventDate,
-                Description = description?.Trim(),
-                Status = string.IsNullOrWhiteSpace(status) ? "Active" : status,
-                CreatedBy = createdBy,
-                UpdateBy = createdBy,
-                CreatedAt = now,
-                UpdateAt = now
-            };
-
-            _context.Events.Add(entity);
-            await _context.SaveChangesAsync();
-
-            if (images != null && images.Count > 0)
-            {
-                int order = 1;
-                bool coverSet = false;
-
-                foreach (var file in images.Where(f => f != null && f.Length > 0))
-                {
-                    var fileName = await SaveImageAsync(file);
-
-                    _context.EventsImgs.Add(new EventsImg
-                    {
-                        EventsId = entity.Id,
-                        Image = fileName,
-                        IsCover = !coverSet,
-                        OrderId = order++
-                    });
-
-                    coverSet = true;
-                }
-
-                await _context.SaveChangesAsync();
+                return BadRequest(ModelState);
             }
 
-            return Ok(new { Message = "เพิ่ม Event สำเร็จ", Id = entity.Id });
+            // 2. ตรวจสอบเงื่อนไขเพิ่มเติม (Business Logic)
+            if (!string.IsNullOrWhiteSpace(body.Status) && body.Status != "Active" && body.Status != "inActive")
+                return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
+
+            try
+            {
+                var now = DateTime.UtcNow.AddHours(7);
+
+                // 3. Map ข้อมูลจาก DTO ไปยัง Entity
+                var entity = new Event
+                {
+                    CategoryId = body.CategoryId,
+                    Events = body.Events.Trim(),
+                    Location = body.Location?.Trim(),
+                    EventDate = body.EventDate,
+                    Description = body.Description?.Trim(),
+                    Status = string.IsNullOrWhiteSpace(body.Status) ? "Active" : body.Status,
+                    CreatedBy = body.CreatedBy,
+                    UpdateBy = body.CreatedBy,
+                    CreatedAt = now,
+                    UpdateAt = now
+                };
+
+                _context.Events.Add(entity);
+                await _context.SaveChangesAsync();
+
+                // 4. จัดการเรื่องรูปภาพ (ใช้ body.Images จาก DTO)
+                if (body.Images != null && body.Images.Count > 0)
+                {
+                    int order = 1;
+                    bool coverSet = false;
+
+                    foreach (var file in body.Images.Where(f => f != null && f.Length > 0))
+                    {
+                        var fileName = await SaveImageAsync(file);
+
+                        _context.EventsImgs.Add(new EventsImg
+                        {
+                            EventsId = entity.Id,
+                            Image = fileName,
+                            IsCover = !coverSet, // รูปแรกจะเป็นรูป Cover (IsCover = true)
+                            OrderId = order++
+                        });
+
+                        coverSet = true;
+                    }
+
+                    await _context.SaveChangesAsync();
+                }
+
+                return Ok(new { Message = "เพิ่ม Event สำเร็จ", Id = entity.Id });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
+            }
         }
 
         // ✅ PUT: /api/events/5  (แก้ข้อมูล event อย่างเดียว)
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> UpdateInfo(int id, [FromBody] Event body)
+        public async Task<IActionResult> UpdateInfo(int id, [FromBody] UpdateEventDto body) // เปลี่ยนมารับค่าจาก UpdateEventDto
         {
-            var entity = await _context.Events.FindAsync(id);
-            if (entity == null) return NotFound(new { Message = "ไม่พบ Event" });
+            // 1. ตรวจสอบ Validation เบื้องต้นจาก Annotations ใน DTO (เช่น [Required])
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-            if (string.IsNullOrWhiteSpace(body.Events))
-                return BadRequest(new { Message = "Event Name ห้ามว่าง" });
-
+            // 2. ตรวจสอบเงื่อนไข Status ตาม Business Logic
             if (!string.IsNullOrWhiteSpace(body.Status) && body.Status != "Active" && body.Status != "inActive")
                 return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
-            entity.CategoryId = body.CategoryId;
-            entity.Events = body.Events.Trim();
-            entity.Location = body.Location?.Trim();
-            entity.EventDate = body.EventDate;
-            entity.Description = body.Description?.Trim();
-            if (!string.IsNullOrWhiteSpace(body.Status)) entity.Status = body.Status;
+            try
+            {
+                var entity = await _context.Events.FindAsync(id);
+                if (entity == null) return NotFound(new { Message = "ไม่พบ Event" });
 
-            entity.UpdateBy = body.UpdateBy;
-            entity.UpdateAt = DateTime.UtcNow.AddHours(7);
+                // 3. Map ข้อมูลจาก DTO ไปยัง Entity
+                entity.CategoryId = body.CategoryId;
+                entity.Events = body.Events.Trim();
+                entity.Location = body.Location?.Trim();
+                entity.EventDate = body.EventDate;
+                entity.Description = body.Description?.Trim();
 
-            await _context.SaveChangesAsync();
-            return Ok(new { Message = "แก้ไข Event สำเร็จ" });
+                if (!string.IsNullOrWhiteSpace(body.Status))
+                    entity.Status = body.Status;
+
+                entity.UpdateBy = body.UpdateBy;
+                entity.UpdateAt = DateTime.UtcNow.AddHours(7);
+
+                await _context.SaveChangesAsync();
+                return Ok(new { Message = "แก้ไข Event สำเร็จ" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
+            }
         }
 
         // ✅ POST: /api/events/5/images  (เพิ่มรูป)
@@ -245,41 +263,7 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "เพิ่มรูปสำเร็จ" });
         }
 
-        // ✅ PUT: /api/events/images/{imgId}/cover  (ตั้งรูปปก)
-        [HttpPut("images/{imgId:int}/cover")]
-        public async Task<IActionResult> SetCover(int imgId)
-        {
-            var img = await _context.EventsImgs.FirstOrDefaultAsync(x => x.Id == imgId);
-            if (img == null) return NotFound(new { Message = "ไม่พบรูป" });
-
-            var olds = await _context.EventsImgs
-                .Where(x => x.EventsId == img.EventsId && x.IsCover == true)
-                .ToListAsync();
-
-            foreach (var o in olds) o.IsCover = false;
-            img.IsCover = true;
-
-            await _context.SaveChangesAsync();
-            return Ok(new { Message = "ตั้งรูปปกสำเร็จ" });
-        }
-
-        public class ReorderItem { public int Id { get; set; } public int OrderId { get; set; } }
-
-        // ✅ PUT: /api/events/{id}/images/reorder
-        [HttpPut("{id:int}/images/reorder")]
-        public async Task<IActionResult> Reorder(int id, [FromBody] List<ReorderItem> items)
-        {
-            var imgs = await _context.EventsImgs.Where(x => x.EventsId == id).ToListAsync();
-            if (imgs.Count == 0) return Ok(new { Message = "ไม่มีรูปให้จัดลำดับ" });
-
-            var map = items?.ToDictionary(x => x.Id, x => x.OrderId) ?? new Dictionary<int, int>();
-            foreach (var img in imgs)
-                if (map.TryGetValue(img.Id, out var order))
-                    img.OrderId = order;
-
-            await _context.SaveChangesAsync();
-            return Ok(new { Message = "จัดลำดับรูปสำเร็จ" });
-        }
+     
 
         // ✅ DELETE: /api/events/images/{imgId}
         [HttpDelete("images/{imgId:int}")]
