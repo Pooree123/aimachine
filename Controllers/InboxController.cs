@@ -153,5 +153,66 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] InboxSearchQueryDto req)
+        {
+            try
+            {
+                var query = _context.Inboxes
+                    .AsNoTracking()
+                    .Where(x => x.Deleteflag != true)
+                    .Include(x => x.Title)
+                    .AsQueryable();
+
+                // 1) Filter topic (optional)
+                if (req.TopicId.HasValue)
+                    query = query.Where(x => x.TitleId == req.TopicId.Value);
+
+                // 2) Filter date (optional) - เทียบเฉพาะวัน
+                if (req.Date.HasValue)
+                {
+                    var d = req.Date.Value.Date;
+                    var next = d.AddDays(1);
+                    query = query.Where(x => x.CreatedAt >= d && x.CreatedAt < next);
+                }
+
+                // 3) Search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+                if (!string.IsNullOrWhiteSpace(req.Q))
+                {
+                    var kw = req.Q.Trim();
+
+                    query = query.Where(x =>
+                        EF.Functions.Collate((x.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((x.Email ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((x.Phone ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((x.Message ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        (x.Title != null && EF.Functions.Collate((x.Title.TopicTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw))
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.TitleId,
+                        TopicTitle = x.Title != null ? x.Title.TopicTitle : null,
+                        x.Name,
+                        x.Message,
+                        x.Phone,
+                        x.Email,
+                        x.CreatedAt,
+                        x.UpdateAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
     }
 }

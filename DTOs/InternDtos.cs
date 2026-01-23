@@ -31,4 +31,10 @@ namespace Aimachine.DTOs
         // ✅ รับ List ใหม่มาทับของเดิม
         public List<int> StackTagIds { get; set; } = new List<int>();
     }
+
+    public class InternSearchQueryDto
+    {
+        public string? Q { get; set; }
+        public int? DepartmentId { get; set; } // dropdown ALL DEPARTMENT
+    }
 }

@@ -41,4 +41,11 @@ namespace Aimachine.DTOs
 
         public int? UpdateBy { get; set; }
     }
+
+    public class InboxSearchQueryDto
+    {
+        public string? Q { get; set; }          // keyword
+        public int? TopicId { get; set; }       // dropdown
+        public DateTime? Date { get; set; }     // date filter
+    }
 }

@@ -232,5 +232,48 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] PartnerSearchQueryDto req)
+        {
+            try
+            {
+                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+                var query = _context.Partners
+                    .AsNoTracking()
+                    .AsQueryable();
+
+                // ✅ ค้นหาจากชื่อ (ไม่สนตัวเล็ก/ใหญ่)
+                if (!string.IsNullOrWhiteSpace(req.Q))
+                {
+                    var kw = req.Q.Trim();
+                    query = query.Where(p =>
+                        EF.Functions.Collate((p.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(p => p.Id)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        ImageUrl = string.IsNullOrEmpty(p.Image)
+                            ? null
+                            : $"{baseUrl}/uploads/partners/{p.Image}",
+                        p.Name,
+                        p.Status,     // ส่งไปให้ FE แสดงป้าย Active/inActive ได้
+                        p.CreatedAt,
+                        p.UpdateAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
     }
 }

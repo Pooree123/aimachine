@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Http;
 
 namespace Aimachine.DTOs
@@ -36,5 +36,11 @@ namespace Aimachine.DTOs
 
         // ???????????????????????? (Append)
         public List<IFormFile>? NewImageFiles { get; set; }
+    }
+
+    public class SolutionSearchQueryDto
+    {
+        public string? Q { get; set; }
+        public int? DepartmentId { get; set; }   // ✅ filter dropdown
     }
 }

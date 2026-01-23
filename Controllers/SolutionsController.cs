@@ -289,9 +289,9 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ลบรูปภาพสำเร็จ" });
         }
 
-
+        // ✅ GET: /api/solutions/search?q=...&departmentId=1
         [HttpGet("search")]
-        public async Task<IActionResult> Search([FromQuery] string? q)
+        public async Task<IActionResult> Search([FromQuery] SolutionSearchQueryDto req)
         {
             try
             {
@@ -301,38 +301,40 @@ namespace Aimachine.Controllers
                     .AsNoTracking()
                     .Include(s => s.SolutionImgs)
                     .AsQueryable();
+                // ✅ 0) Filter Department (ถ้าส่งมา)
+                    if (req.DepartmentId.HasValue)
+                    {
+                        query = query.Where(s => s.DepartmentId == req.DepartmentId.Value);
+                    }
 
-   
-
-                if (!string.IsNullOrWhiteSpace(q))
+                // ✅ 1) Search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+                if (!string.IsNullOrWhiteSpace(req.Q))
                 {
-                    var kw = q.Trim();
-                    query = query.Where(x =>
-                        EF.Functions.Collate((x.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
-                        EF.Functions.Collate((x.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    var kw = req.Q.Trim();
+                    query = query.Where(s =>
+                        EF.Functions.Collate((s.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((s.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
                     );
                 }
 
                 var data = await query
-                    .OrderByDescending(x => x.Id)
-                    .Select(x => new
+                    .OrderByDescending(s => s.Id)
+                    .Select(s => new
                     {
-                        x.Id,
-                        x.DepartmentId,
-                        x.Name,
-                        x.Description,
-                        x.Status,
-                        x.CreatedAt,
+                        s.Id,
+                        s.DepartmentId,
+                        s.Name,
+                        s.Description,
+                        s.Status,
+                        s.CreatedAt,
 
-                        CoverUrl = x.SolutionImgs
-                            .OrderByDescending(img => img.IsCover)   
+                        CoverUrl = s.SolutionImgs
+                            .OrderByDescending(img => img.IsCover)
                             .ThenBy(img => img.Id)
                             .Select(img => string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}")
                             .FirstOrDefault(),
 
-                        ImagesCount = x.SolutionImgs.Count(),
-
-                      
+                        ImagesCount = s.SolutionImgs.Count()
                     })
                     .ToListAsync();
 

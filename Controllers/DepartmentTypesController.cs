@@ -119,4 +119,65 @@ public class DepartmentTypesController : ControllerBase
 
         return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
     }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] DepartmentSearchQueryDto req)
+    {
+        try
+        {
+            var query = _context.DepartmentTypes
+                .AsNoTracking()
+                .AsQueryable();
+
+            // search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+            if (!string.IsNullOrWhiteSpace(req.Q))
+            {
+                var kw = req.Q.Trim();
+                query = query.Where(d =>
+                    EF.Functions.Collate((d.DepartmentTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                );
+            }
+
+            var data = await query
+                .OrderByDescending(d => d.Id)
+                .Select(d => new
+                {
+                    d.Id,
+                    d.DepartmentTitle,
+                    d.CreatedAt,
+                    d.UpdateAt
+                })
+                .ToListAsync();
+
+            return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+        }
+    }
+
+    [HttpGet("dropdown")]
+    public async Task<IActionResult> GetDropdown()
+    {
+        try
+        {
+            var data = await _context.DepartmentTypes
+                .AsNoTracking()
+                .OrderBy(x => x.DepartmentTitle)
+                .Select(x => new DepartmentSelectionDto // เรียกใช้ DTO ที่สร้างไว้
+                {
+                    Value = x.Id,
+                    Label = x.DepartmentTitle ?? ""
+                })
+                .ToListAsync();
+
+            return Ok(new { Message = "โหลด dropdown สำเร็จ", Data = data });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = "โหลด dropdown ไม่สำเร็จ", Error = ex.Message });
+        }
+    }
+
 }

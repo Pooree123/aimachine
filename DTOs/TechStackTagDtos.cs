@@ -25,4 +25,10 @@ namespace Aimachine.DTOs
 
         public int UpdateBy { get; set; }
     }
+
+    public class TechStackTagSearchQueryDto
+    {
+        public string? Q { get; set; }
+        public int? DepartmentId { get; set; }
+    }
 }

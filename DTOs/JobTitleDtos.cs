@@ -1,4 +1,6 @@
-﻿namespace Aimachine.DTOs;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace Aimachine.DTOs;
 
 public class CreateJobTitleDto
 {
@@ -11,4 +13,10 @@ public class UpdateJobTitleDto
 {
     public string JobsTitle { get; set; } = string.Empty;
     public int? UpdateBy { get; set; }
+}
+
+public class JobTitleSearchQueryDto
+{
+    public string? Q { get; set; }
+    public int? DepartmentId { get; set; }
 }

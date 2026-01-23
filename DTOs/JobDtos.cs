@@ -40,4 +40,11 @@ namespace Aimachine.DTOs
 
         public List<int>? TechStackTagIds { get; set; }
     }
+
+    public class JobSearchQueryDto
+    {
+        public string? Q { get; set; }
+        public int? JobTitleId { get; set; }
+        public string? Status { get; set; }
+    }
 }

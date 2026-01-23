@@ -175,5 +175,51 @@ namespace Aimachine.Controllers
 
             return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
         }
+    
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] JobSearchQueryDto req)
+        {
+            var query = _context.Jobs
+                .AsNoTracking()
+                .Include(j => j.JobTitle)
+                .Include(j => j.JobsTags)
+                .AsQueryable();
+
+
+           
+            if (req.JobTitleId.HasValue)
+                query = query.Where(j => j.JobTitleId == req.JobTitleId.Value);
+
+            
+            if (!string.IsNullOrWhiteSpace(req.Q))
+            {
+                var kw = req.Q.Trim();
+                query = query.Where(j =>
+                    EF.Functions.Collate((j.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                    (j.JobTitle != null &&
+                     EF.Functions.Collate((j.JobTitle.JobsTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw))
+                );
+            }
+
+            var data = await query
+                .OrderByDescending(j => j.Id)
+                .Select(j => new
+                {
+                    j.Id,
+                    j.Description,
+                    j.Status,             
+                    j.TotalPositions,
+                    j.DateOpen,
+                    j.DateEnd,
+                    j.JobTitleId,
+                    JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
+                    TechStackTagIds = j.JobsTags.Select(t => t.StackTagId ?? 0).ToList(),
+                    j.CreatedAt,
+                    j.UpdateAt
+                })
+                .ToListAsync();
+
+            return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+        }
     }
 }
