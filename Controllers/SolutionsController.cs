@@ -2,6 +2,7 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -18,9 +19,6 @@ namespace Aimachine.Controllers
             _environment = environment;
         }
 
-        // =============================================
-        // GET: GetAll
-        // =============================================
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -56,9 +54,6 @@ namespace Aimachine.Controllers
             return Ok(data);
         }
 
-        // =============================================
-        // GET: GetById
-        // =============================================
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -91,9 +86,6 @@ namespace Aimachine.Controllers
             return Ok(s);
         }
 
-        // =============================================
-        // ✅ POST: Create (แก้ไขแล้ว)
-        // =============================================
         [HttpPost]
         public async Task<IActionResult> Create([FromForm] CreateSolutionDto dto)
         {
@@ -102,7 +94,6 @@ namespace Aimachine.Controllers
 
             var strategy = _context.Database.CreateExecutionStrategy();
 
-            // ✅ ระบุ <IActionResult> ชัดเจน เพื่อแก้ Error CS8031
             return await strategy.ExecuteAsync<IActionResult>(async () =>
             {
                 using var transaction = await _context.Database.BeginTransactionAsync();
@@ -167,9 +158,6 @@ namespace Aimachine.Controllers
             });
         }
 
-        // =============================================
-        // ✅ PUT: Update (แก้ไขแล้ว)
-        // =============================================
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromForm] UpdateSolutionDto dto)
         {
@@ -247,9 +235,6 @@ namespace Aimachine.Controllers
             });
         }
 
-        // =============================================
-        // DELETE: Delete (ไม่ต้องใช้ Transaction เพราะลบตรงๆ)
-        // =============================================
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -303,5 +288,61 @@ namespace Aimachine.Controllers
 
             return Ok(new { Message = "ลบรูปภาพสำเร็จ" });
         }
+
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] string? q)
+        {
+            try
+            {
+                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+                var query = _context.Solutions
+                    .AsNoTracking()
+                    .Include(s => s.SolutionImgs)
+                    .AsQueryable();
+
+   
+
+                if (!string.IsNullOrWhiteSpace(q))
+                {
+                    var kw = q.Trim();
+                    query = query.Where(x =>
+                        EF.Functions.Collate((x.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
+                        EF.Functions.Collate((x.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(x => x.Id)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        x.DepartmentId,
+                        x.Name,
+                        x.Description,
+                        x.Status,
+                        x.CreatedAt,
+
+                        CoverUrl = x.SolutionImgs
+                            .OrderByDescending(img => img.IsCover)   
+                            .ThenBy(img => img.Id)
+                            .Select(img => string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}")
+                            .FirstOrDefault(),
+
+                        ImagesCount = x.SolutionImgs.Count(),
+
+                      
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+
     }
 }

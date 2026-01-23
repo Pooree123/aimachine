@@ -9,6 +9,7 @@ using System.Security.Claims;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -59,9 +60,12 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
-        // [Authorize] // ⚠️ เปิดกลับมาหลังจากสร้าง Admin คนแรกเสร็จแล้ว
+        [Authorize] 
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
+
+            int currentUserId = User.GetUserId();
+
             if (await _context.AdminUsers.AnyAsync(u => u.Username == request.Username))
             {
                 return BadRequest("Username นี้มีคนใช้แล้ว");
@@ -76,12 +80,8 @@ namespace Aimachine.Controllers
                 FullName = request.FullName,
                 Status = "Active",
                 Deleteflag = false,
-
-                // ✅ 1. แก้ไขให้รับค่า CreatedBy จาก DTO
-                CreatedBy = request.CreatedBy,
-
-                // ✅ 2. ตั้งค่า UpdateBy เป็นคนเดียวกับคนสร้าง (สำหรับครั้งแรก)
-                UpdateBy = request.CreatedBy,
+                CreatedBy = currentUserId,
+                UpdateBy = currentUserId,
 
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
@@ -97,13 +97,16 @@ namespace Aimachine.Controllers
         [Authorize]
         public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto request)
         {
+
+            int currentUserId = User.GetUserId();
+
             var user = await _context.AdminUsers.FindAsync(id);
             if (user == null) return NotFound();
 
             user.FullName = request.FullName;
-            user.Status = request.Status;
+            user.Username = request.Username;
 
-            user.UpdateBy = request.UpdateBy;
+            user.UpdateBy = currentUserId;
 
             user.UpdateAt = DateTime.UtcNow.AddHours(7);
 
@@ -160,8 +163,6 @@ namespace Aimachine.Controllers
             {
                 Message = "เข้าสู่ระบบสำเร็จ",
                 Token = tokenString,
-                UserId = user.Id,
-                FullName = user.FullName
             });
         }
     }

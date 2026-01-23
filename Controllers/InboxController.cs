@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -17,6 +19,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpGet]
+        [Authorize]
         public async Task<IActionResult> GetAll([FromQuery] int? topicId)
         {
             try
@@ -55,6 +58,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpGet("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> GetById(int id)
         {
             try
@@ -108,8 +112,6 @@ namespace Aimachine.Controllers
                     Message = request.Message.Trim(),
                     Phone = request.Phone?.Trim(),
                     Email = request.Email?.Trim(),
-                    CreatedBy = request.CreatedBy,
-                    UpdateBy = request.CreatedBy,
                     CreatedAt = DateTime.UtcNow.AddHours(7),
                     UpdateAt = DateTime.UtcNow.AddHours(7),
                     Deleteflag = false 
@@ -127,6 +129,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpDelete("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             try
