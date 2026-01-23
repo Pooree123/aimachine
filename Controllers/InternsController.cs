@@ -230,5 +230,77 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] InternSearchQueryDto req)
+        {
+            try
+            {
+                var query = _context.Interns
+                    .AsNoTracking()
+                    .Include(i => i.JobTitle)
+                        .ThenInclude(j => j.Department)
+                    .Include(i => i.InternTags)
+                        .ThenInclude(it => it.StackTag)
+                    .AsQueryable();
+
+                // 1) filter department (optional) จาก dropdown
+                if (req.DepartmentId.HasValue)
+                {
+                    query = query.Where(i =>
+                        i.JobTitle != null &&
+                        i.JobTitle.DepartmentId == req.DepartmentId.Value
+                    );
+                }
+
+                // 2) search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
+                // ค้นได้จาก: ชื่องาน(JobTitle), รายละเอียด(Description), ชื่อ Tag(TechStackTitle)
+                if (!string.IsNullOrWhiteSpace(req.Q))
+                {
+                    var kw = req.Q.Trim();
+
+                    query = query.Where(i =>
+                        EF.Functions.Collate((i.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                        || (i.JobTitle != null &&
+                            EF.Functions.Collate((i.JobTitle.JobsTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw))
+                        || i.InternTags.Any(t =>
+                            t.StackTag != null &&
+                            EF.Functions.Collate((t.StackTag.TechStackTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                        )
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(i => i.Id)
+                    .Select(i => new
+                    {
+                        i.Id,
+                        i.JobTitleId,
+                        JobTitleName = i.JobTitle != null ? i.JobTitle.JobsTitle : "",
+                        DepartmentId = i.JobTitle != null ? i.JobTitle.DepartmentId : (int?)null,
+                        DepartmentName = (i.JobTitle != null && i.JobTitle.Department != null) ? i.JobTitle.Department.DepartmentTitle : "",
+                        i.Description,
+                        i.TotalPositions,
+                        i.DateOpen,
+                        i.DateEnd,
+                        i.Status,
+                        Tags = i.InternTags.Select(t => new
+                        {
+                            t.StackTagId,
+                            TagName = t.StackTag != null ? t.StackTag.TechStackTitle : ""
+                        }).ToList(),
+                        i.CreatedAt,
+                        i.UpdateAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+
     }
 }

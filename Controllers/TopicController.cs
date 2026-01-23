@@ -197,5 +197,73 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] TopicSearchQueryDto req)
+        {
+            try
+            {
+                var query = _context.Topics
+                    .AsNoTracking()
+                    .AsQueryable();
+
+                // search keyword (ไม่สนตัวเล็ก/ใหญ่)
+                if (!string.IsNullOrWhiteSpace(req.Q))
+                {
+                    var kw = req.Q.Trim();
+
+                    query = query.Where(x =>
+                        EF.Functions.Collate((x.TopicTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                    );
+                }
+
+                var data = await query
+                    .OrderByDescending(x => x.Id)
+                    .Select(x => new
+                    {
+                        x.Id,
+                        TopicTitle = x.TopicTitle, // หรือชื่อคอลัมน์จริงของคุณ
+                        x.CreatedBy,
+                        x.UpdateBy,
+                        x.CreatedAt,
+                        x.UpdateAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ค้นหาไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+
+        [HttpGet("dropdown")]
+        public async Task<IActionResult> Dropdown()
+        {
+            try
+            {
+                var data = await _context.Topics
+                    .AsNoTracking()
+                    .OrderBy(t => t.TopicTitle)
+                    .Select(t => new TopicDropdownDto
+                    {
+                        Value = t.Id,
+                        Label = t.TopicTitle
+                    })
+                    .ToListAsync();
+
+                // ถ้าอยากให้มี Select topic เป็นตัวแรก (optional)
+                data.Insert(0, new TopicDropdownDto { Value = 0, Label = "Select topic" });
+
+                return Ok(new { Message = "โหลด dropdown สำเร็จ", Data = data });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "โหลด dropdown ไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+
+
     }
 }
