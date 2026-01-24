@@ -9,6 +9,7 @@ public class UpdateCompanyProfileDto
     public string? Address { get; set; }
     public string? GoogleUrl { get; set; }
     public string? FacebookUrl { get; set; }
+    public string? YoutubeUrl { get; set; }
+    public string? TiktokUrl { get; set; }
     public string? LineId { get; set; }
-    public int? UpdateBy { get; set; }
 }

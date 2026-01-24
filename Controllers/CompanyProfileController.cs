@@ -18,7 +18,7 @@ public class CompanyProfileController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get()
     {
-        // แก้ไข: เพิ่ม Where(x => x.Id == 1) เพื่อดึงเฉพาะ ID 1
+        // ดึงเฉพาะ ID 1
         var cp = await _context.CompanyProfiles.AsNoTracking()
           .Where(x => x.Id == 1)
           .Select(x => new {
@@ -30,6 +30,9 @@ public class CompanyProfileController : ControllerBase
               x.Address,
               x.GoogleUrl,
               x.FacebookUrl,
+              // ✅ เพิ่ม 2 บรรทัดนี้ใน Select
+              x.YoutubeUrl,
+              x.TiktokUrl,
               x.LineId,
               x.UpdateBy,
               x.UpdateAt
@@ -45,7 +48,6 @@ public class CompanyProfileController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Update([FromBody] UpdateCompanyProfileDto dto)
     {
-
         int currentUserId = User.GetUserId();
 
         try
@@ -55,8 +57,9 @@ public class CompanyProfileController : ControllerBase
 
             if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile (ID 1)" });
 
-            if (dto.UpdateBy.HasValue && !await _context.AdminUsers.AnyAsync(a => a.Id == dto.UpdateBy.Value))
-                return BadRequest(new { Message = "update_by ไม่ถูกต้อง (ไม่พบ admin_users)" });
+            // (ส่วนเช็ค AdminUsers เอาออกก็ได้ถ้าไม่ได้ใช้ หรือถ้าใช้ก็เก็บไว้)
+            // if (dto.UpdateBy.HasValue && !await _context.AdminUsers.AnyAsync(a => a.Id == dto.UpdateBy.Value))
+            //     return BadRequest(new { Message = "update_by ไม่ถูกต้อง" });
 
             cp.CompannyName = dto.CompannyName?.Trim();
             cp.Description = dto.Description?.Trim();
@@ -65,8 +68,14 @@ public class CompanyProfileController : ControllerBase
             cp.Address = dto.Address?.Trim();
             cp.GoogleUrl = dto.GoogleUrl?.Trim();
             cp.FacebookUrl = dto.FacebookUrl?.Trim();
+
+            // ✅ เพิ่มการอัปเดต 2 ค่านี้
+            cp.YoutubeUrl = dto.YoutubeUrl?.Trim();
+            cp.TiktokUrl = dto.TiktokUrl?.Trim();
+
             cp.LineId = dto.LineId?.Trim();
-            cp.UpdateBy = currentUserId;
+
+            cp.UpdateBy = currentUserId; // ใช้ ID จาก Token เสมอ
             cp.UpdateAt = DateTime.UtcNow.AddHours(7);
 
             await _context.SaveChangesAsync();

@@ -169,6 +169,12 @@ public partial class AimachineContext : DbContext
             entity.Property(e => e.GoogleUrl)
                 .HasMaxLength(255)
                 .HasColumnName("google_url");
+            entity.Property(e => e.YoutubeUrl)
+                .HasMaxLength(255)
+                .HasColumnName("youtube_url");
+            entity.Property(e => e.TiktokUrl)
+                .HasMaxLength(255)
+                .HasColumnName("tiktok_url");
             entity.Property(e => e.LineId)
                 .HasMaxLength(50)
                 .HasColumnName("line_id");

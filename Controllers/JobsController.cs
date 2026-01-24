@@ -18,11 +18,13 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
+        // ✅ 1. สำหรับ Public (หน้าบ้าน) - ดึงเฉพาะ Status = "Active"
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetPublicJobs()
         {
             var data = await _context.Jobs
                 .AsNoTracking()
+                .Where(j => j.Status == "Active") // 👈 กรองเฉพาะ Active
                 .OrderByDescending(j => j.Id)
                 .Select(j => new
                 {
@@ -32,12 +34,10 @@ namespace Aimachine.Controllers
                     j.TotalPositions,
                     j.DateOpen,
                     j.DateEnd,
-
                     j.JobTitleId,
-                    // ✅ ดึงชื่อ Job Title
                     JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
 
-                    // ✅ เพิ่มบรรทัดนี้: ดึง DepartmentId จากตาราง JobTitle
+                    // ดึง DepartmentId
                     DepartmentId = j.JobTitle != null ? j.JobTitle.DepartmentId : (int?)null,
 
                     TechStacks = j.JobsTags.Select(jt => new
@@ -53,6 +53,44 @@ namespace Aimachine.Controllers
 
             return Ok(data);
         }
+
+        // เข้าผ่าน: GET api/jobs/admin
+        [HttpGet("admin")]
+        [Authorize] // 👈 ต้อง Login ก่อนถึงจะเข้าได้
+        public async Task<IActionResult> GetAdminJobs()
+        {
+            var data = await _context.Jobs
+                .AsNoTracking()
+                .OrderByDescending(j => j.Id)
+                // ไม่ต้องมี Where Status เพื่อให้เห็นทั้งหมด (Active/inActive)
+                .Select(j => new
+                {
+                    j.Id,
+                    j.Description,
+                    j.Status,
+                    j.TotalPositions,
+                    j.DateOpen,
+                    j.DateEnd,
+                    j.JobTitleId,
+                    JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
+
+                    DepartmentId = j.JobTitle != null ? j.JobTitle.DepartmentId : (int?)null,
+
+                    TechStacks = j.JobsTags.Select(jt => new
+                    {
+                        Id = jt.StackTagId,
+                        Name = jt.StackTag != null ? jt.StackTag.TechStackTitle : ""
+                    }).ToList(),
+
+                    j.CreatedAt,
+                    j.UpdateAt
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        // ... (ส่วนอื่นๆ GetById, Create, Update, Delete, Search เหมือนเดิมด้านล่าง) ...
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
@@ -70,13 +108,10 @@ namespace Aimachine.Controllers
                     j.TotalPositions,
                     j.DateOpen,
                     j.DateEnd,
-
                     j.JobTitleId,
-
                     JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
-
+                    DepartmentId = j.JobTitle != null ? j.JobTitle.DepartmentId : (int?)null, // เพิ่มตรงนี้ให้ด้วยเผื่อใช้
                     TechStackTagIds = j.JobsTags.Select(t => t.StackTagId ?? 0).ToList(),
-
                     j.CreatedAt,
                     j.UpdateAt
                 })
@@ -120,7 +155,6 @@ namespace Aimachine.Controllers
                     var jobTag = new JobsTag
                     {
                         JobId = entity.Id,
-
                         StackTagId = tagId
                     };
                     _context.JobsTags.Add(jobTag);
@@ -135,7 +169,6 @@ namespace Aimachine.Controllers
         [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateJobDto dto)
         {
-
             int currentUserId = User.GetUserId();
 
             var entity = await _context.Jobs.FindAsync(id);
@@ -191,7 +224,7 @@ namespace Aimachine.Controllers
 
             return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
         }
-    
+
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] JobSearchQueryDto req)
         {
@@ -201,12 +234,13 @@ namespace Aimachine.Controllers
                 .Include(j => j.JobsTags)
                 .AsQueryable();
 
+            // หมายเหตุ: Search ปกติควรให้เห็นแค่ Active ไหม? หรือแล้วแต่ Business Logic
+            // ถ้าอยากให้ Search หน้าบ้านเห็นแค่ Active ให้เพิ่มบรรทัดนี้:
+            // query = query.Where(j => j.Status == "Active");
 
-           
             if (req.JobTitleId.HasValue)
                 query = query.Where(j => j.JobTitleId == req.JobTitleId.Value);
 
-            
             if (!string.IsNullOrWhiteSpace(req.Q))
             {
                 var kw = req.Q.Trim();
@@ -223,12 +257,13 @@ namespace Aimachine.Controllers
                 {
                     j.Id,
                     j.Description,
-                    j.Status,             
+                    j.Status,
                     j.TotalPositions,
                     j.DateOpen,
                     j.DateEnd,
                     j.JobTitleId,
                     JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
+                    DepartmentId = j.JobTitle != null ? j.JobTitle.DepartmentId : (int?)null, // เพิ่ม DepartmentId ใน Search ด้วย
                     TechStackTagIds = j.JobsTags.Select(t => t.StackTagId ?? 0).ToList(),
                     j.CreatedAt,
                     j.UpdateAt

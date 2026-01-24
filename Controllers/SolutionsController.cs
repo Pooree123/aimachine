@@ -20,7 +20,7 @@ namespace Aimachine.Controllers
             _environment = environment;
         }
 
-        // ✅ เพิ่ม Helper Function เช็คไฟล์รูป
+        // ✅ Helper Function เช็คไฟล์รูป
         private bool IsAllowedImageFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return false;
@@ -35,11 +35,62 @@ namespace Aimachine.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetPublicSolutions()
+        {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+            var data = await _context.DepartmentTypes // 1. เริ่ม query จาก Department
+                .AsNoTracking()
+                .Where(d => d.Solutions.Any(s => s.Status == "Active"))
+                .Select(d => new
+                {
+                    DepartmentId = d.Id,
+                    DepartmentTitle = d.DepartmentTitle,
+
+                    // ✅ 3. ส่งเป็นชุด List ของ Solutions ที่สังกัด Department นี้
+                    Solutions = d.Solutions
+                        .Where(s => s.Status == "Active") // เอาเฉพาะ Active
+                        .OrderByDescending(s => s.Id)
+                        .Select(s => new
+                        {
+                            s.Id,
+                            s.DepartmentId,
+                            s.Name,
+                            s.Description,
+                            s.Status,
+                            // DepartmentTitle ใส่ไว้ในแม่แล้ว แต่ถ้าอยากให้ลูกมีด้วยก็ใส่ได้ครับ
+                            DepartmentTitle = d.DepartmentTitle,
+
+                            Images = s.SolutionImgs
+                                .Where(img => img.IsCover == true)
+                                .Select(img => new
+                                {
+                                    img.Id,
+                                    Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
+                                    img.IsCover
+                                })
+                                .ToList(),
+
+                            s.CreatedAt,
+                            s.UpdateAt
+                        })
+                        .ToList()
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        // ✅ 2. สำหรับ Admin (หลังบ้าน) - ดึงทั้งหมด (All Status)
+        // เข้าผ่าน: GET api/solutions/admin
+        [HttpGet("admin")]
+        [Authorize] // 👈 ต้อง Login ก่อนถึงจะเข้าได้
+        public async Task<IActionResult> GetAdminSolutions()
         {
             var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
             var data = await _context.Solutions
                 .AsNoTracking()
+                // ไม่ต้องมี Where Status เพื่อให้เห็นทั้งหมด
                 .Include(s => s.Department)
                 .Include(s => s.SolutionImgs)
                 .OrderByDescending(s => s.Id)
@@ -348,7 +399,7 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ลบรูปภาพสำเร็จ" });
         }
 
-        // ... (Search เหมือนเดิม) ...
+        // GET: /api/solutions/search?departmentTitle=Automation
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] SolutionSearchQueryDto req)
         {
@@ -361,6 +412,9 @@ namespace Aimachine.Controllers
                     .Include(s => s.Department)
                     .Include(s => s.SolutionImgs)
                     .AsQueryable();
+
+                // ⚠️ (Optional) ถ้าหน้าบ้าน Search ก็อาจจะอยากให้เจอแค่ Active เหมือนกัน
+                // query = query.Where(s => s.Status == "Active");
 
                 if (req.DepartmentId.HasValue)
                 {

@@ -21,6 +21,10 @@ public partial class CompanyProfile
 
     public string? FacebookUrl { get; set; }
 
+    public string? YoutubeUrl { get; set; }
+
+    public string? TiktokUrl { get; set; }
+
     public string? LineId { get; set; }
 
     public int? UpdateBy { get; set; }
