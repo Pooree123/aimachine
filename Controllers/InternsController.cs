@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -16,32 +18,44 @@ namespace Aimachine.Controllers
             _context = context;
         }
 
-        // GET: GetAll
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
+            // ไม่จำเป็นต้องใช้ตัวแปร today ใน Query แล้ว แต่ประกาศไว้ใช้ที่อื่นได้
+            var today = DateTime.UtcNow.AddHours(7);
+
             var data = await _context.Interns
                 .AsNoTracking()
                 .Include(i => i.JobTitle)
                     .ThenInclude(j => j.Department)
                 .Include(i => i.InternTags)
                     .ThenInclude(it => it.StackTag)
-                .OrderByDescending(i => i.Id)
+
+                // ✅ แก้ไขตรงนี้: เปลี่ยน Logic ให้ EF Core แปลภาษา SQL ได้ง่ายๆ
+                // 1. OrderByDescending(HasValue) -> เอาคนที่มีวันปิดรับ (True) ขึ้นก่อน, ไม่มี (False) ไว้ล่าง
+                // 2. ThenBy(DateEnd) -> เรียงวันปิดรับจาก "น้อยไปมาก" (อดีต -> อนาคต) 
+                //    ผลลัพธ์จะเหมือนกับสูตร (Today - DateEnd) เรียงจาก "มากไปน้อย"
+                .OrderByDescending(i => i.DateEnd.HasValue)
+                .ThenBy(i => i.DateEnd)
+
                 .Select(i => new
                 {
                     i.Id,
                     i.JobTitleId,
-                    JobTitleName = i.JobTitle.JobsTitle,
-                    DepartmentName = i.JobTitle.Department.DepartmentTitle,
+                    JobTitleName = i.JobTitle != null ? i.JobTitle.JobsTitle : "",
+                    DepartmentId = i.JobTitle != null ? i.JobTitle.DepartmentId : (int?)null,
+                    DepartmentName = (i.JobTitle != null && i.JobTitle.Department != null)
+                                     ? i.JobTitle.Department.DepartmentTitle
+                                     : "",
                     i.Description,
                     i.TotalPositions,
                     i.DateOpen,
                     i.DateEnd,
                     i.Status,
-                    Tags = i.InternTags.Select(t => new
+                    TechStacks = i.InternTags.Select(it => new
                     {
-                        t.StackTagId,
-                        TagName = t.StackTag != null ? t.StackTag.TechStackTitle : ""
+                        Id = it.StackTagId,
+                        Name = it.StackTag != null ? it.StackTag.TechStackTitle : ""
                     }).ToList(),
                     i.CreatedAt,
                     i.UpdateAt
@@ -89,8 +103,12 @@ namespace Aimachine.Controllers
 
         // ✅ แก้ไข: POST (ใช้ Strategy Wrap Transaction)
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateInternDto dto)
         {
+
+            int currentUserId = User.GetUserId();
+
             if (!await _context.JobTitles.AnyAsync(j => j.Id == dto.JobTitleId))
                 return BadRequest(new { Message = "ไม่พบ JobTitle ID ที่ระบุ" });
 
@@ -111,8 +129,8 @@ namespace Aimachine.Controllers
                         DateOpen = dto.DateOpen,
                         DateEnd = dto.DateEnd,
                         Status = dto.Status,
-                        CreatedBy = dto.CreatedBy,
-                        UpdateBy = dto.CreatedBy,
+                        CreatedBy = currentUserId,
+                        UpdateBy = currentUserId,
                         CreatedAt = DateTime.UtcNow.AddHours(7),
                         UpdateAt = DateTime.UtcNow.AddHours(7)
                     };
@@ -146,8 +164,11 @@ namespace Aimachine.Controllers
 
         // ✅ แก้ไข: PUT (ใช้ Strategy Wrap Transaction)
         [HttpPut("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateInternDto dto)
         {
+            int currentUserId = User.GetUserId();
+
             var strategy = _context.Database.CreateExecutionStrategy();
 
             return await strategy.ExecuteAsync<IActionResult>(async () =>
@@ -171,7 +192,7 @@ namespace Aimachine.Controllers
                     entity.DateOpen = dto.DateOpen;
                     entity.DateEnd = dto.DateEnd;
                     entity.Status = dto.Status;
-                    entity.UpdateBy = dto.UpdateBy;
+                    entity.UpdateBy = currentUserId;
                     entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
                     // 2. จัดการ Tags (ลบเก่า -> ใส่ใหม่)
@@ -205,6 +226,7 @@ namespace Aimachine.Controllers
 
         // DELETE (ไม่ต้องใช้ Transaction เพราะลบทีเดียวจบ)
         [HttpDelete("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             var entity = await _context.Interns

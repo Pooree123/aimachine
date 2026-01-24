@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers;
 
@@ -39,13 +41,15 @@ public class CompanyProfileController : ControllerBase
     }
 
     // PUT: api/companyprofile
-    // แก้ไข: เอา {id} ออกจาก Route เพราะเราจะ fix เป็น 1 ข้างใน
     [HttpPut]
+    [Authorize]
     public async Task<IActionResult> Update([FromBody] UpdateCompanyProfileDto dto)
     {
+
+        int currentUserId = User.GetUserId();
+
         try
         {
-            // แก้ไข: Fix ID เป็น 1 เสมอ
             int fixedId = 1;
             var cp = await _context.CompanyProfiles.FindAsync(fixedId);
 
@@ -62,7 +66,7 @@ public class CompanyProfileController : ControllerBase
             cp.GoogleUrl = dto.GoogleUrl?.Trim();
             cp.FacebookUrl = dto.FacebookUrl?.Trim();
             cp.LineId = dto.LineId?.Trim();
-            cp.UpdateBy = dto.UpdateBy;
+            cp.UpdateBy = currentUserId;
             cp.UpdateAt = DateTime.UtcNow.AddHours(7);
 
             await _context.SaveChangesAsync();

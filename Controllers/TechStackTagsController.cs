@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -63,17 +65,21 @@ namespace Aimachine.Controllers
 
 
 		[HttpPost]
-		public async Task<IActionResult> Create([FromBody] CreateTechStackTagDto dto)
+        [Authorize]
+        public async Task<IActionResult> Create([FromBody] CreateTechStackTagDto dto)
 		{
-			if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
+
+            int currentUserId = User.GetUserId();
+
+            if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
 				return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
 
 			var entity = new TechStackTag
 			{
 				DepartmentId = dto.DepartmentId,
 				TechStackTitle = dto.TechStackTitle.Trim(), // ✅
-				CreatedBy = dto.CreatedBy,
-				UpdateBy = dto.CreatedBy,
+				CreatedBy = currentUserId,
+				UpdateBy = currentUserId,
 				CreatedAt = DateTime.UtcNow.AddHours(7),
 				UpdateAt = DateTime.UtcNow.AddHours(7)
 			};
@@ -86,9 +92,13 @@ namespace Aimachine.Controllers
 
 
 		[HttpPut("{id:int}")]
-		public async Task<IActionResult> Update(int id, [FromBody] UpdateTechStackTagDto dto)
+        [Authorize]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateTechStackTagDto dto)
 		{
-			var entity = await _context.TechStackTags.FindAsync(id);
+
+            int currentUserId = User.GetUserId();
+
+            var entity = await _context.TechStackTags.FindAsync(id);
 			if (entity == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
 
 			if (entity.DepartmentId != dto.DepartmentId)
@@ -99,7 +109,7 @@ namespace Aimachine.Controllers
 
 			entity.DepartmentId = dto.DepartmentId;
 			entity.TechStackTitle = dto.TechStackTitle.Trim(); // ✅
-			entity.UpdateBy = dto.UpdateBy;
+			entity.UpdateBy = currentUserId;
 			entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
 			await _context.SaveChangesAsync();
@@ -107,7 +117,8 @@ namespace Aimachine.Controllers
 		}
 
 		[HttpDelete("{id:int}")]
-		public async Task<IActionResult> Delete(int id)
+        [Authorize]
+        public async Task<IActionResult> Delete(int id)
 		{
 
 			bool isInUse = await _context.TechStackTags1
@@ -127,6 +138,24 @@ namespace Aimachine.Controllers
 
 			return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
 		}
+
+        [HttpGet("by-department/{departmentId:int}")]
+        public async Task<IActionResult> GetByDepartment(int departmentId)
+        {
+            var data = await _context.TechStackTags
+                .AsNoTracking()
+                .Where(t => t.DepartmentId == departmentId)
+                .OrderBy(t => t.TechStackTitle) // เรียงตามตัวอักษร ก-ฮ, A-Z เพื่อให้หาง่าย
+                .Select(t => new
+                {
+                    t.Id,
+                    t.TechStackTitle,
+                    t.DepartmentId
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
 
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] TechStackTagSearchQueryDto req)

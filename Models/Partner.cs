@@ -24,4 +24,8 @@ public partial class Partner
     public virtual AdminUser? CreatedByNavigation { get; set; }
 
     public virtual AdminUser? UpdateByNavigation { get; set; }
+
+    public int? DepartmentId { get; set; }
+
+    public virtual DepartmentType? Department { get; set; }
 }

@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -18,7 +20,20 @@ namespace Aimachine.Controllers
             _environment = environment;
         }
 
-        // ✅ GET: /api/partners
+        // ✅ Helper Function: ตรวจสอบไฟล์รูปภาพ
+        private bool IsAllowedImageFile(IFormFile file)
+        {
+            if (file == null || file.Length == 0) return false;
+
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
+            var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
+
+            var ext = Path.GetExtension(file.FileName).ToLower();
+            var mime = file.ContentType.ToLower();
+
+            return allowedExtensions.Contains(ext) && allowedMimeTypes.Contains(mime);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
@@ -28,12 +43,16 @@ namespace Aimachine.Controllers
 
                 var data = await _context.Partners
                   .AsNoTracking()
+                  .Include(x => x.Department)
+                  .Include(x => x.CreatedByNavigation)
+                  .Include(x => x.UpdateByNavigation)
                   .Where(x => x.Status != "Deleted")
                   .OrderByDescending(x => x.Id)
                   .Select(x => new
                   {
                       x.Id,
-                      // ✅ 1. แก้ URL ตอนดึงรูปมาแสดง (จาก images -> uploads)
+                      x.DepartmentId,
+                      DepartmentTitle = x.Department != null ? x.Department.DepartmentTitle : "",
                       ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
                       x.Name,
                       x.Status,
@@ -54,7 +73,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ GET: /api/partners/5
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -64,11 +82,14 @@ namespace Aimachine.Controllers
 
                 var data = await _context.Partners
                   .AsNoTracking()
+                  .Include(x => x.Department)
+                  .Include(x => x.CreatedByNavigation)
                   .Where(x => x.Id == id)
                   .Select(x => new
                   {
                       x.Id,
-                      // ✅ 2. แก้ URL ตรงนี้ด้วย
+                      x.DepartmentId,
+                      DepartmentTitle = x.Department != null ? x.Department.DepartmentTitle : "",
                       ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
                       x.Name,
                       x.Status,
@@ -90,15 +111,32 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ POST: /api/partners
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromForm] CreatePartnerDto request)
         {
+            int currentUserId = User.GetUserId();
+
             if (!ModelState.IsValid)
                 return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
+            // 🛡️ ตรวจสอบไฟล์รูปภาพ (Validation)
+            if (request.ImageFile != null)
+            {
+                if (!IsAllowedImageFile(request.ImageFile))
+                {
+                    return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
+                }
+            }
+
             try
             {
+                if (request.DepartmentId.HasValue)
+                {
+                    if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == request.DepartmentId))
+                        return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
+                }
+
                 if (request.CreatedBy.HasValue)
                 {
                     var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.CreatedBy.Value);
@@ -113,9 +151,7 @@ namespace Aimachine.Controllers
                 string newFileName = null;
                 if (request.ImageFile != null)
                 {
-                    // ✅ 3. แก้ Path ที่บันทึกไฟล์ (images -> uploads)
                     string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-
                     if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
                     newFileName = Guid.NewGuid().ToString() + Path.GetExtension(request.ImageFile.FileName);
@@ -130,10 +166,11 @@ namespace Aimachine.Controllers
                 var entity = new Partner
                 {
                     Name = request.Name.Trim(),
+                    DepartmentId = request.DepartmentId,
                     Image = newFileName,
                     Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status,
-                    CreatedBy = request.CreatedBy,
-                    UpdateBy = request.CreatedBy,
+                    CreatedBy = currentUserId,
+                    UpdateBy = currentUserId,
                     CreatedAt = DateTime.UtcNow.AddHours(7),
                     UpdateAt = DateTime.UtcNow.AddHours(7)
                 };
@@ -149,21 +186,37 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ PUT: /api/partners/5
         [HttpPut("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromForm] UpdatePartnerDto request)
         {
+            int currentUserId = User.GetUserId();
+
+            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่ (Validation)
+            if (request.ImageFile != null)
+            {
+                if (!IsAllowedImageFile(request.ImageFile))
+                {
+                    return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
+                }
+            }
+
             try
             {
                 var entity = await _context.Partners.FindAsync(id);
                 if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
+
+                if (request.DepartmentId.HasValue && request.DepartmentId != entity.DepartmentId)
+                {
+                    if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == request.DepartmentId))
+                        return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
+                }
 
                 if (!string.IsNullOrWhiteSpace(request.Status) && request.Status != "Active" && request.Status != "inActive")
                     return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
                 if (request.ImageFile != null)
                 {
-                    // ✅ 4. แก้ Path ตอนแก้ไขไฟล์ (images -> uploads)
                     string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
                     if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
@@ -187,9 +240,10 @@ namespace Aimachine.Controllers
                 }
 
                 entity.Name = request.Name.Trim();
+                entity.DepartmentId = request.DepartmentId;
                 if (!string.IsNullOrWhiteSpace(request.Status)) entity.Status = request.Status;
 
-                entity.UpdateBy = request.UpdateBy;
+                entity.UpdateBy = currentUserId;
                 entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
                 await _context.SaveChangesAsync();
@@ -201,8 +255,8 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ DELETE: /api/partners/5
         [HttpDelete("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             try
@@ -212,7 +266,6 @@ namespace Aimachine.Controllers
 
                 if (!string.IsNullOrEmpty(entity.Image))
                 {
-                    // ✅ 5. แก้ Path ตอนลบไฟล์ (images -> uploads)
                     string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
                     string filePath = Path.Combine(uploadsFolder, entity.Image);
 
@@ -242,14 +295,14 @@ namespace Aimachine.Controllers
 
                 var query = _context.Partners
                     .AsNoTracking()
+                    .Include(p => p.Department)
                     .AsQueryable();
 
-                // ✅ ค้นหาจากชื่อ (ไม่สนตัวเล็ก/ใหญ่)
                 if (!string.IsNullOrWhiteSpace(req.Q))
                 {
                     var kw = req.Q.Trim();
                     query = query.Where(p =>
-                        EF.Functions.Collate((p.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                        p.Name != null && p.Name.Contains(kw)
                     );
                 }
 
@@ -258,11 +311,13 @@ namespace Aimachine.Controllers
                     .Select(p => new
                     {
                         p.Id,
+                        p.DepartmentId,
+                        DepartmentTitle = p.Department != null ? p.Department.DepartmentTitle : "",
                         ImageUrl = string.IsNullOrEmpty(p.Image)
                             ? null
                             : $"{baseUrl}/uploads/partners/{p.Image}",
                         p.Name,
-                        p.Status,     // ส่งไปให้ FE แสดงป้าย Active/inActive ได้
+                        p.Status,
                         p.CreatedAt,
                         p.UpdateAt
                     })

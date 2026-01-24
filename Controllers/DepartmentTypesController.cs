@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers;
 
@@ -12,19 +14,19 @@ public class DepartmentTypesController : ControllerBase
     private readonly AimachineContext _context;
     public DepartmentTypesController(AimachineContext context) => _context = context;
 
-    // GET: All
     [HttpGet]
     public async Task<IActionResult> GetAll()
       => Ok(await _context.DepartmentTypes
         .AsNoTracking()
-        .OrderByDescending(x => x.Id)
+        .OrderBy(x => x.CanDelete) // เรียง false (0) ขึ้นก่อน true (1)
+        .ThenByDescending(x => x.Id) // (เสริม) ในกลุ่มเดียวกัน ให้เรียง Id ล่าสุดขึ้นก่อนเหมือนเดิม
         .Select(x => new
         {
             x.Id,
             x.DepartmentTitle,
             x.CreatedAt,
             x.UpdateAt,
-            x.CanDelete // ✅ ส่งค่า CanDelete ไปด้วย
+            x.CanDelete
         })
         .ToListAsync());
 
@@ -51,16 +53,19 @@ public class DepartmentTypesController : ControllerBase
 
     // POST: Create
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateDepartmentTypeDto dto)
     {
+        int currentUserId = User.GetUserId();
+
         if (string.IsNullOrWhiteSpace(dto.DepartmentTitle))
             return BadRequest(new { Message = "กรุณากรอก department_title" });
 
         var entity = new DepartmentType
         {
             DepartmentTitle = dto.DepartmentTitle.Trim(),
-            CreatedBy = dto.CreatedBy,
-            UpdateBy = dto.CreatedBy,
+            CreatedBy = currentUserId,
+            UpdateBy = currentUserId,
             CreatedAt = DateTime.UtcNow.AddHours(7),
             UpdateAt = DateTime.UtcNow.AddHours(7),
             CanDelete = true // ✅ Default: ให้ลบได้สำหรับข้อมูลที่สร้างใหม่
@@ -74,8 +79,11 @@ public class DepartmentTypesController : ControllerBase
 
     // PUT: Update
     [HttpPut("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateDepartmentTypeDto dto)
     {
+        int currentUserId = User.GetUserId();
+
         if (string.IsNullOrWhiteSpace(dto.DepartmentTitle))
             return BadRequest(new { Message = "กรุณากรอก department_title" });
 
@@ -84,7 +92,7 @@ public class DepartmentTypesController : ControllerBase
             return NotFound(new { Message = "ไม่พบ Department Type" });
 
         entity.DepartmentTitle = dto.DepartmentTitle.Trim();
-        entity.UpdateBy = dto.UpdateBy;
+        entity.UpdateBy = currentUserId;
         entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
         await _context.SaveChangesAsync();
@@ -93,6 +101,7 @@ public class DepartmentTypesController : ControllerBase
 
     // DELETE: Delete
     [HttpDelete("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> Delete(int id)
     {
         var entity = await _context.DepartmentTypes.FindAsync(id);

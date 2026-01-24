@@ -550,6 +550,10 @@ public partial class AimachineContext : DbContext
                 .HasColumnType("datetime")
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
+
+            // ✅ 1. เพิ่ม Mapping ให้ตรงกับ Database
+            entity.Property(e => e.DepartmentId).HasColumnName("department_id");
+
             entity.Property(e => e.Image)
                 .HasMaxLength(255)
                 .IsUnicode(false)
@@ -574,6 +578,10 @@ public partial class AimachineContext : DbContext
             entity.HasOne(d => d.UpdateByNavigation).WithMany(p => p.PartnerUpdateByNavigations)
                 .HasForeignKey(d => d.UpdateBy)
                 .HasConstraintName("FK__partners__update__06CD04F7");
+
+            entity.HasOne(d => d.Department)
+                .WithMany()
+                .HasForeignKey(d => d.DepartmentId);
         });
 
         modelBuilder.Entity<Solution>(entity =>

@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -21,8 +23,6 @@ namespace Aimachine.Controllers
         {
             var data = await _context.Jobs
                 .AsNoTracking()
-                .Include(j => j.JobTitle)
-                .Include(j => j.JobsTags)
                 .OrderByDescending(j => j.Id)
                 .Select(j => new
                 {
@@ -34,9 +34,17 @@ namespace Aimachine.Controllers
                     j.DateEnd,
 
                     j.JobTitleId,
+                    // ✅ ดึงชื่อ Job Title
                     JobTitleName = j.JobTitle != null ? j.JobTitle.JobsTitle : "",
 
-                    TechStackTagIds = j.JobsTags.Select(t => t.StackTagId ?? 0).ToList(),
+                    // ✅ เพิ่มบรรทัดนี้: ดึง DepartmentId จากตาราง JobTitle
+                    DepartmentId = j.JobTitle != null ? j.JobTitle.DepartmentId : (int?)null,
+
+                    TechStacks = j.JobsTags.Select(jt => new
+                    {
+                        Id = jt.StackTagId,
+                        Name = jt.StackTag != null ? jt.StackTag.TechStackTitle : ""
+                    }).ToList(),
 
                     j.CreatedAt,
                     j.UpdateAt
@@ -80,8 +88,11 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateJobDto dto)
         {
+            int currentUserId = User.GetUserId();
+
             if (!await _context.JobTitles.AnyAsync(jt => jt.Id == dto.JobTitleId))
                 return BadRequest(new { Message = "ไม่พบ JobTitle ID นี้" });
 
@@ -93,8 +104,8 @@ namespace Aimachine.Controllers
                 DateOpen = dto.DateOpen,
                 DateEnd = dto.DateEnd,
                 Status = dto.Status,
-                CreatedBy = dto.CreatedBy,
-                UpdateBy = dto.CreatedBy,
+                CreatedBy = currentUserId,
+                UpdateBy = currentUserId,
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
             };
@@ -121,8 +132,12 @@ namespace Aimachine.Controllers
         }
 
         [HttpPut("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateJobDto dto)
         {
+
+            int currentUserId = User.GetUserId();
+
             var entity = await _context.Jobs.FindAsync(id);
             if (entity == null) return NotFound(new { Message = "ไม่พบประกาศงาน" });
 
@@ -138,7 +153,7 @@ namespace Aimachine.Controllers
             entity.DateOpen = dto.DateOpen;
             entity.DateEnd = dto.DateEnd;
             entity.Status = dto.Status;
-            entity.UpdateBy = dto.UpdateBy;
+            entity.UpdateBy = currentUserId;
             entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
             if (dto.TechStackTagIds != null)
@@ -162,6 +177,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpDelete("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             var entity = await _context.Jobs.FindAsync(id);

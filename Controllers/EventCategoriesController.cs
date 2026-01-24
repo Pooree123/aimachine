@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Aimachine.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -59,12 +61,12 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = data });
         }
 
-        // ✅ POST: /api/event-categories
-        // body: { "eventTitle": "Christmasday", "createdBy": 1 }
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CreateEventCategoryDto body) // เปลี่ยนมารับค่าจาก DTO
+        [Authorize]
+        public async Task<IActionResult> Create([FromBody] CreateEventCategoryDto body) 
         {
-            // ตรวจสอบความถูกต้องของข้อมูล (Validation)
+            int currentUserId = User.GetUserId();
+
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
@@ -79,7 +81,7 @@ namespace Aimachine.Controllers
                 {
                     EventTitle = body.EventTitle.Trim(),
                     CreatedBy = body.CreatedBy,
-                    UpdateBy = body.CreatedBy, // เริ่มต้นให้ค่า UpdateBy เท่ากับคนสร้าง
+                    UpdateBy = currentUserId, // เริ่มต้นให้ค่า UpdateBy เท่ากับคนสร้าง
                     CreatedAt = now,
                     UpdateAt = now
                 };
@@ -103,12 +105,12 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ PUT: /api/event-categories/5
-        // body: { "eventTitle": "New Year", "updateBy": 1 }
         [HttpPut("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateEventCategoryDto body) // เปลี่ยนจาก EventCategory เป็น DTO
         {
-            // ตรวจสอบความถูกต้องของข้อมูลตามที่ระบุใน DTO (เช่น [Required])
+            int currentUserId = User.GetUserId();
+
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
@@ -122,7 +124,7 @@ namespace Aimachine.Controllers
 
                 // อัปเดตข้อมูลจาก DTO ลงใน Entity
                 entity.EventTitle = body.EventTitle.Trim();
-                entity.UpdateBy = body.UpdateBy;
+                entity.UpdateBy = currentUserId;
                 entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
                 await _context.SaveChangesAsync();

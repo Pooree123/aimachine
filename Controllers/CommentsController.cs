@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers;
 
@@ -24,12 +26,12 @@ public class CommentsController : ControllerBase
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
-          .Where(c => c.Status == "Deleted") 
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
               c.Id,
               c.JobTitleId,
+              c.Status,
               ProfileImg = !string.IsNullOrEmpty(c.ProfileImg) && c.ProfileImg.StartsWith("http")
                            ? c.ProfileImg
                            : (string.IsNullOrEmpty(c.ProfileImg) ? null : $"{baseUrl}/{c.ProfileImg}"),
@@ -114,6 +116,7 @@ public class CommentsController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> HideComment(int id)
     {
         try
@@ -131,6 +134,36 @@ public class CommentsController : ControllerBase
         catch (Exception ex)
         {
             return BadRequest(new { Message = "ดำเนินการไม่สำเร็จ", Error = ex.Message });
+        }
+    }
+
+    // PATCH: api/comments/{id}/status
+    [HttpPatch("{id:int}/status")]
+    [Authorize]
+    public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateCommentStatusDto dto)
+    {
+        try
+        {
+            // 1. ตรวจสอบค่า Status ที่ส่งมาว่าถูกต้องไหม (ป้องกันการพิมพ์ผิด)
+            if (dto.Status != "Active" && dto.Status != "inActive")
+            {
+                return BadRequest(new { Message = "Status ต้องเป็น 'Active' หรือ 'inActive' เท่านั้น" });
+            }
+
+            // 2. ค้นหา Comment
+            var entity = await _context.Comments.FindAsync(id);
+            if (entity == null) return NotFound(new { Message = "ไม่พบคอมเมนต์" });
+
+
+            entity.Status = dto.Status; 
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = $"อัปเดตสถานะเป็น {dto.Status} สำเร็จ", Id = entity.Id, Status = entity.Status });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { Message = "อัปเดตสถานะไม่สำเร็จ", Error = ex.Message });
         }
     }
 

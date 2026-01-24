@@ -41,6 +41,9 @@ namespace Aimachine.DTOs
     public class SolutionSearchQueryDto
     {
         public string? Q { get; set; }
-        public int? DepartmentId { get; set; }   // ✅ filter dropdown
+        public int? DepartmentId { get; set; }
+
+        // ✅ เพิ่มตัวนี้เข้าไปครับ
+        public string? DepartmentTitle { get; set; }
     }
 }

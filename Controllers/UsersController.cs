@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using System.Text.RegularExpressions;
 
 namespace Aimachine.Controllers
 {
@@ -24,6 +25,45 @@ namespace Aimachine.Controllers
         {
             _context = context;
             _configuration = configuration;
+        }
+
+        // ✅ Helper Check: Username ต้องเป็น A-Z, a-z, 0-9 เท่านั้น
+        private bool IsValidUsername(string username)
+        {
+            // Regex: ^ เริ่มต้น, [a-zA-Z0-9] ตัวอักษรหรือตัวเลข, + มี 1 ตัวขึ้นไป, $ จบประโยค
+            return Regex.IsMatch(username, "^[a-zA-Z0-9]+$");
+        }
+
+        // ✅ Helper Check: Password Complexity
+        private bool IsPasswordStrong(string password, out string errorMessage)
+        {
+            errorMessage = "";
+            if (string.IsNullOrWhiteSpace(password))
+            {
+                errorMessage = "รหัสผ่านห้ามเป็นค่าว่าง";
+                return false;
+            }
+            if (password.Length < 8)
+            {
+                errorMessage = "รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร";
+                return false;
+            }
+            if (!Regex.IsMatch(password, @"[A-Z]"))
+            {
+                errorMessage = "รหัสผ่านต้องมีตัวพิมพ์ใหญ่ (A-Z) อย่างน้อย 1 ตัว";
+                return false;
+            }
+            if (!Regex.IsMatch(password, @"[a-z]"))
+            {
+                errorMessage = "รหัสผ่านต้องมีตัวพิมพ์เล็ก (a-z) อย่างน้อย 1 ตัว";
+                return false;
+            }
+            if (!Regex.IsMatch(password, @"[0-9]"))
+            {
+                errorMessage = "รหัสผ่านต้องมีตัวเลข (0-9) อย่างน้อย 1 ตัว";
+                return false;
+            }
+            return true;
         }
 
         [HttpGet]
@@ -60,29 +100,41 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
-        [Authorize] 
+        [Authorize]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
-
             int currentUserId = User.GetUserId();
+            var username = request.Username.Trim();
 
-            if (await _context.AdminUsers.AnyAsync(u => u.Username == request.Username))
+            // 1. ✅ เช็คอักขระพิเศษใน Username
+            if (!IsValidUsername(username))
             {
-                return BadRequest("Username นี้มีคนใช้แล้ว");
+                return BadRequest(new { Message = "Username ต้องประกอบด้วยตัวอักษรภาษาอังกฤษ (a-z) หรือตัวเลข (0-9) เท่านั้น ห้ามมีช่องว่างหรืออักขระพิเศษ" });
+            }
+
+            // 2. ✅ เช็ค Username ซ้ำ
+            if (await _context.AdminUsers.AnyAsync(u => u.Username.ToLower() == username.ToLower() && u.Deleteflag == false))
+            {
+                return BadRequest(new { Message = $"Username '{username}' มีผู้ใช้งานแล้ว" });
+            }
+
+            // 3. ✅ เช็คความยากรหัสผ่าน
+            if (!IsPasswordStrong(request.Password, out string pwdError))
+            {
+                return BadRequest(new { Message = pwdError });
             }
 
             string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
             var newUser = new AdminUser
             {
-                Username = request.Username,
+                Username = username,
                 PasswordHash = passwordHash,
-                FullName = request.FullName,
+                FullName = request.FullName?.Trim(),
                 Status = "Active",
                 Deleteflag = false,
                 CreatedBy = currentUserId,
                 UpdateBy = currentUserId,
-
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
             };
@@ -97,17 +149,31 @@ namespace Aimachine.Controllers
         [Authorize]
         public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto request)
         {
-
             int currentUserId = User.GetUserId();
-
             var user = await _context.AdminUsers.FindAsync(id);
             if (user == null) return NotFound();
 
-            user.FullName = request.FullName;
-            user.Username = request.Username;
+            var newUsername = request.Username.Trim();
 
+            // 1. ✅ เช็คอักขระพิเศษใน Username (กรณีมีการเปลี่ยนชื่อ)
+            if (!IsValidUsername(newUsername))
+            {
+                return BadRequest(new { Message = "Username ต้องประกอบด้วยตัวอักษรภาษาอังกฤษ (a-z) หรือตัวเลข (0-9) เท่านั้น" });
+            }
+
+            // 2. ✅ เช็ค Username ซ้ำ (เฉพาะถ้าเปลี่ยนชื่อใหม่)
+            if (newUsername.ToLower() != user.Username.ToLower())
+            {
+                var exists = await _context.AdminUsers
+                    .AnyAsync(u => u.Username.ToLower() == newUsername.ToLower() && u.Id != id && u.Deleteflag == false);
+
+                if (exists)
+                    return BadRequest(new { Message = $"Username '{newUsername}' มีผู้ใช้งานแล้ว" });
+            }
+
+            user.FullName = request.FullName?.Trim();
+            user.Username = newUsername;
             user.UpdateBy = currentUserId;
-
             user.UpdateAt = DateTime.UtcNow.AddHours(7);
 
             await _context.SaveChangesAsync();
@@ -136,7 +202,7 @@ namespace Aimachine.Controllers
 
             if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             {
-                return Unauthorized("ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง");
+                return Unauthorized(new { Message = "ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง" });
             }
 
             var tokenHandler = new JwtSecurityTokenHandler();

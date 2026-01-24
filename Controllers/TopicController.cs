@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
@@ -74,8 +76,12 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateTopicDto request)
         {
+
+            int currentUserId = User.GetUserId();
+
             if (!ModelState.IsValid)
                 return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
@@ -97,8 +103,8 @@ namespace Aimachine.Controllers
                 var entity = new Topic
                 {
                     TopicTitle = title,
-                    CreatedBy = request.CreatedBy,
-                    UpdateBy = request.CreatedBy,
+                    CreatedBy = currentUserId,
+                    UpdateBy = currentUserId,
                     CreatedAt = DateTime.UtcNow.AddHours(7),
                     UpdateAt = DateTime.UtcNow.AddHours(7)
                 };
@@ -124,8 +130,11 @@ namespace Aimachine.Controllers
 
 
         [HttpPut("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateTopicDto request)
         {
+            int currentUserId = User.GetUserId();
+
             if (!ModelState.IsValid)
                 return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
@@ -149,7 +158,7 @@ namespace Aimachine.Controllers
                     return BadRequest(new { Message = "ชื่อ Topic ซ้ำกับรายการอื่น" });
 
                 entity.TopicTitle = title;
-                entity.UpdateBy = request.UpdateBy;
+                entity.UpdateBy = currentUserId;
                 entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
                 await _context.SaveChangesAsync();
@@ -171,6 +180,7 @@ namespace Aimachine.Controllers
         }
 
         [HttpDelete("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             try

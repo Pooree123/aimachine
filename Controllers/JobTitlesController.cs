@@ -2,6 +2,8 @@
 using Aimachine.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
+using Aimachine.Extensions;
 
 namespace Aimachine.Controllers;
 
@@ -35,8 +37,11 @@ public class JobTitlesController : ControllerBase
             .ToListAsync());
 
     [HttpPost]
+    [Authorize]
     public async Task<IActionResult> Create([FromBody] CreateJobTitleDto dto)
     {
+        int currentUserId = User.GetUserId();
+
         if (string.IsNullOrWhiteSpace(dto.JobsTitle))
             return BadRequest(new { Message = "กรุณากรอก jobs_title" });
 
@@ -47,8 +52,8 @@ public class JobTitlesController : ControllerBase
         {
             DepartmentId = dto.DepartmentId,
             JobsTitle = dto.JobsTitle.Trim(),
-            CreatedBy = dto.CreatedBy,
-            UpdateBy = dto.CreatedBy,
+            CreatedBy = currentUserId,
+            UpdateBy = currentUserId,
             CreatedAt = DateTime.UtcNow.AddHours(7),
             UpdateAt = DateTime.UtcNow.AddHours(7)
         };
@@ -60,8 +65,11 @@ public class JobTitlesController : ControllerBase
     }
 
     [HttpPut("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateJobTitleDto dto)
     {
+        int currentUserId = User.GetUserId();
+
         if (string.IsNullOrWhiteSpace(dto.JobsTitle))
             return BadRequest(new { Message = "กรุณากรอก jobs_title" });
 
@@ -70,7 +78,7 @@ public class JobTitlesController : ControllerBase
             return NotFound(new { Message = "ไม่พบ Job Title" });
 
         entity.JobsTitle = dto.JobsTitle.Trim();
-        entity.UpdateBy = dto.UpdateBy;
+        entity.UpdateBy = currentUserId;
         entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
         await _context.SaveChangesAsync();
@@ -78,6 +86,7 @@ public class JobTitlesController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
+    [Authorize]
     public async Task<IActionResult> Delete(int id)
     {
         var entity = await _context.JobTitles.FindAsync(id);

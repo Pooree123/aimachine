@@ -25,4 +25,10 @@ namespace Aimachine.DTOs
         public DateTime? Date { get; set; }
         public int? JobTitleId { get; set; } // ✅ filter จาก dropdown
     }
+
+    public class UpdateCommentStatusDto
+    {
+        [Required]
+        public string Status { get; set; } = null!; // ค่าที่ส่งมาเช่น "Active" หรือ "inActive"
+    }
 }
