@@ -29,6 +29,6 @@ namespace Aimachine.DTOs
     public class UpdateCommentStatusDto
     {
         [Required]
-        public string Status { get; set; } = null!; // ค่าที่ส่งมาเช่น "Active" หรือ "inActive"
+        public string Status { get; set; } // รับค่าเช่น "Active" หรือ "inActive"
     }
 }

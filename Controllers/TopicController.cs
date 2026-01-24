@@ -31,6 +31,8 @@ namespace Aimachine.Controllers
                       t.Id,
                       t.TopicTitle,
                       t.CreatedBy,
+                      // ดึงชื่อคนสร้างมาแสดง (ถ้ามี)
+                      CreatedByName = t.CreatedByNavigation != null ? t.CreatedByNavigation.FullName : "",
                       t.UpdateBy,
                       t.CreatedAt,
                       t.UpdateAt
@@ -79,7 +81,7 @@ namespace Aimachine.Controllers
         [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateTopicDto request)
         {
-
+            // ✅ ใช้ ID จาก Token เสมอ
             int currentUserId = User.GetUserId();
 
             if (!ModelState.IsValid)
@@ -87,15 +89,9 @@ namespace Aimachine.Controllers
 
             try
             {
-                if (request.CreatedBy.HasValue)
-                {
-                    var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.CreatedBy.Value);
-                    if (!adminExists) return BadRequest(new { Message = "created_by ไม่ถูกต้อง (ไม่พบ admin_users)" });
-                }
-
                 var title = request.TopicTitle.Trim();
 
-                // 2. เช็คชื่อซ้ำ (ป้องกัน Topic ชื่อเดียวกัน)
+                // เช็คชื่อซ้ำ
                 var exists = await _context.Topics.AnyAsync(t => t.TopicTitle == title);
                 if (exists)
                     return BadRequest(new { Message = "มี Topic ชื่อนี้อยู่แล้ว" });
@@ -103,8 +99,8 @@ namespace Aimachine.Controllers
                 var entity = new Topic
                 {
                     TopicTitle = title,
-                    CreatedBy = currentUserId,
-                    UpdateBy = currentUserId,
+                    CreatedBy = currentUserId, // ใส่ ID คนสร้าง
+                    UpdateBy = currentUserId,  // ใส่ ID คนแก้ (ครั้งแรกคือคนเดียวกัน)
                     CreatedAt = DateTime.UtcNow.AddHours(7),
                     UpdateAt = DateTime.UtcNow.AddHours(7)
                 };
@@ -114,25 +110,17 @@ namespace Aimachine.Controllers
 
                 return Ok(new { Message = "เพิ่มข้อมูลสำเร็จ", Id = entity.Id });
             }
-            catch (DbUpdateException ex)
-            {
-                return BadRequest(new
-                {
-                    Message = "เพิ่มข้อมูลไม่สำเร็จ (DbUpdateException)",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
-            }
             catch (Exception ex)
             {
                 return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
 
-
         [HttpPut("{id:int}")]
         [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateTopicDto request)
         {
+            // ✅ ใช้ ID จาก Token เสมอ
             int currentUserId = User.GetUserId();
 
             if (!ModelState.IsValid)
@@ -144,34 +132,20 @@ namespace Aimachine.Controllers
                 if (entity == null)
                     return NotFound(new { Message = "ไม่พบ Topic นี้" });
 
-
-                if (request.UpdateBy.HasValue)
-                {
-                    var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.UpdateBy.Value);
-                    if (!adminExists) return BadRequest(new { Message = "update_by ไม่ถูกต้อง" });
-                }
-
                 var title = request.TopicTitle.Trim();
 
+                // เช็คชื่อซ้ำ (ไม่นับตัวเอง)
                 var duplicate = await _context.Topics.AnyAsync(t => t.Id != id && t.TopicTitle == title);
                 if (duplicate)
                     return BadRequest(new { Message = "ชื่อ Topic ซ้ำกับรายการอื่น" });
 
                 entity.TopicTitle = title;
-                entity.UpdateBy = currentUserId;
+                entity.UpdateBy = currentUserId; // อัปเดตคนแก้ไขล่าสุด
                 entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
                 await _context.SaveChangesAsync();
 
                 return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
-            }
-            catch (DbUpdateException ex)
-            {
-                return BadRequest(new
-                {
-                    Message = "แก้ไขข้อมูลไม่สำเร็จ (DbUpdateException)",
-                    Error = ex.InnerException?.Message ?? ex.Message
-                });
             }
             catch (Exception ex)
             {
@@ -217,14 +191,11 @@ namespace Aimachine.Controllers
                     .AsNoTracking()
                     .AsQueryable();
 
-                // search keyword (ไม่สนตัวเล็ก/ใหญ่)
                 if (!string.IsNullOrWhiteSpace(req.Q))
                 {
                     var kw = req.Q.Trim();
-
-                    query = query.Where(x =>
-                        EF.Functions.Collate((x.TopicTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
-                    );
+                    // ใช้ Contains ธรรมดา เพื่อความชัวร์และปลอดภัย
+                    query = query.Where(x => x.TopicTitle != null && x.TopicTitle.Contains(kw));
                 }
 
                 var data = await query
@@ -232,7 +203,7 @@ namespace Aimachine.Controllers
                     .Select(x => new
                     {
                         x.Id,
-                        TopicTitle = x.TopicTitle, // หรือชื่อคอลัมน์จริงของคุณ
+                        x.TopicTitle,
                         x.CreatedBy,
                         x.UpdateBy,
                         x.CreatedAt,
@@ -259,12 +230,9 @@ namespace Aimachine.Controllers
                     .Select(t => new TopicDropdownDto
                     {
                         Value = t.Id,
-                        Label = t.TopicTitle
+                        Label = t.TopicTitle ?? ""
                     })
                     .ToListAsync();
-
-                // ถ้าอยากให้มี Select topic เป็นตัวแรก (optional)
-                data.Insert(0, new TopicDropdownDto { Value = 0, Label = "Select topic" });
 
                 return Ok(new { Message = "โหลด dropdown สำเร็จ", Data = data });
             }
@@ -273,7 +241,5 @@ namespace Aimachine.Controllers
                 return BadRequest(new { Message = "โหลด dropdown ไม่สำเร็จ", Error = ex.Message });
             }
         }
-
-
     }
 }

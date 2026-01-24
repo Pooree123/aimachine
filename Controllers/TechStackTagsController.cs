@@ -7,137 +7,148 @@ using Aimachine.Extensions;
 
 namespace Aimachine.Controllers
 {
-	[Route("api/tech-stack-tags")]
-	[ApiController]
-	public class TechStackTagsController : ControllerBase
-	{
-		private readonly AimachineContext _context;
+    [Route("api/tech-stack-tags")]
+    [ApiController]
+    public class TechStackTagsController : ControllerBase
+    {
+        private readonly AimachineContext _context;
 
-		public TechStackTagsController(AimachineContext context)
-		{
-			_context = context;
-		}
+        public TechStackTagsController(AimachineContext context)
+        {
+            _context = context;
+        }
 
-		[HttpGet]
-		public async Task<IActionResult> GetAll()
-		{
-			// เช็คชื่อ DbSet ตรงนี้ดีๆ นะครับ (TechStackTags หรือ TechStackTag)
-			var data = await _context.TechStackTags
-				.AsNoTracking()
-				.Include(t => t.Department) // Join ตาราง Department
-				.OrderByDescending(t => t.Id)
-				.Select(t => new
-				{
-					t.Id,
-					t.TechStackTitle, 
-					t.DepartmentId,
-					DepartmentName = t.Department != null ? t.Department.DepartmentTitle : "",
-					t.CreatedAt,
-					t.UpdateAt
-				})
-				.ToListAsync();
+        [HttpGet]
+        public async Task<IActionResult> GetAll()
+        {
+            var data = await _context.TechStackTags
+                .AsNoTracking()
+                .Include(t => t.Department)
+                .OrderByDescending(t => t.Id)
+                .Select(t => new
+                {
+                    t.Id,
+                    t.TechStackTitle,
+                    t.DepartmentId,
+                    DepartmentName = t.Department != null ? t.Department.DepartmentTitle : "",
+                    t.CreatedAt,
+                    t.UpdateAt
+                })
+                .ToListAsync();
 
-			return Ok(data);
-		}
+            return Ok(data);
+        }
 
-		[HttpGet("{id:int}")]
-		public async Task<IActionResult> GetById(int id)
-		{
-			var item = await _context.TechStackTags
-				.AsNoTracking()
-				.Include(t => t.Department)
-				.Where(x => x.Id == id)
-				.Select(t => new
-				{
-					t.Id,
-					t.TechStackTitle,
-					t.DepartmentId,
-					DepartmentName = t.Department != null ? t.Department.DepartmentTitle : "",
-					t.CreatedAt,
-					t.UpdateAt
-				})
-				.FirstOrDefaultAsync();
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var item = await _context.TechStackTags
+                .AsNoTracking()
+                .Include(t => t.Department)
+                .Where(x => x.Id == id)
+                .Select(t => new
+                {
+                    t.Id,
+                    t.TechStackTitle,
+                    t.DepartmentId,
+                    DepartmentName = t.Department != null ? t.Department.DepartmentTitle : "",
+                    t.CreatedAt,
+                    t.UpdateAt
+                })
+                .FirstOrDefaultAsync();
 
-			if (item == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
+            if (item == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
 
-			return Ok(item);
-		}
+            return Ok(item);
+        }
 
-
-		[HttpPost]
+        [HttpPost]
         [Authorize]
         public async Task<IActionResult> Create([FromBody] CreateTechStackTagDto dto)
-		{
-
+        {
             int currentUserId = User.GetUserId();
 
             if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
-				return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
+                return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
 
-			var entity = new TechStackTag
-			{
-				DepartmentId = dto.DepartmentId,
-				TechStackTitle = dto.TechStackTitle.Trim(), // ✅
-				CreatedBy = currentUserId,
-				UpdateBy = currentUserId,
-				CreatedAt = DateTime.UtcNow.AddHours(7),
-				UpdateAt = DateTime.UtcNow.AddHours(7)
-			};
+            var entity = new TechStackTag
+            {
+                DepartmentId = dto.DepartmentId,
+                TechStackTitle = dto.TechStackTitle.Trim(),
+                CreatedBy = currentUserId,
+                UpdateBy = currentUserId,
+                CreatedAt = DateTime.UtcNow.AddHours(7),
+                UpdateAt = DateTime.UtcNow.AddHours(7)
+            };
 
-			_context.TechStackTags.Add(entity);
-			await _context.SaveChangesAsync();
+            _context.TechStackTags.Add(entity);
+            await _context.SaveChangesAsync();
 
-			return Ok(new { Message = "เพิ่ม Tech Stack สำเร็จ", Id = entity.Id });
-		}
+            return Ok(new { Message = "เพิ่ม Tech Stack สำเร็จ", Id = entity.Id });
+        }
 
-
-		[HttpPut("{id:int}")]
+        [HttpPut("{id:int}")]
         [Authorize]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateTechStackTagDto dto)
-		{
-
+        {
             int currentUserId = User.GetUserId();
 
             var entity = await _context.TechStackTags.FindAsync(id);
-			if (entity == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
+            if (entity == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
 
-			if (entity.DepartmentId != dto.DepartmentId)
-			{
-				if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
-					return BadRequest(new { Message = "ไม่พบ Department ID ที่ระบุ" });
-			}
+            if (entity.DepartmentId != dto.DepartmentId)
+            {
+                if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
+                    return BadRequest(new { Message = "ไม่พบ Department ID ที่ระบุ" });
+            }
 
-			entity.DepartmentId = dto.DepartmentId;
-			entity.TechStackTitle = dto.TechStackTitle.Trim(); // ✅
-			entity.UpdateBy = currentUserId;
-			entity.UpdateAt = DateTime.UtcNow.AddHours(7);
+            entity.DepartmentId = dto.DepartmentId;
+            entity.TechStackTitle = dto.TechStackTitle.Trim();
+            entity.UpdateBy = currentUserId;
+            entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
-			await _context.SaveChangesAsync();
-			return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
-		}
+            await _context.SaveChangesAsync();
+            return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
+        }
 
-		[HttpDelete("{id:int}")]
+        // ✅ ปรับปรุง Delete Logic ให้ตรงกับ Context
+        [HttpDelete("{id:int}")]
         [Authorize]
         public async Task<IActionResult> Delete(int id)
-		{
+        {
+            var entity = await _context.TechStackTags.FindAsync(id);
+            if (entity == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
 
-			bool isInUse = await _context.TechStackTags1
-				.AnyAsync(x => x.TechId == id); 
+            // 1. เช็คว่าถูกใช้ใน Jobs (ประกาศงาน) หรือไม่?
+            // ✅ ใช้ JobsTags และ StackTagId (ตาม AimachineContext)
+            bool isUsedInJobs = await _context.JobsTags.AnyAsync(jt => jt.StackTagId == id);
+            if (isUsedInJobs)
+            {
+                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกใช้งานอยู่ในประกาศรับสมัครงาน (Jobs)" });
+            }
 
-			if (isInUse)
-			{
-				return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกนำไปใช้งานแล้ว (มีการผูกข้อมูลอยู่ในระบบ)" });
-			}
+            // 2. เช็คว่าถูกใช้ใน Interns (ฝึกงาน) หรือไม่?
+            // ✅ ใช้ InternTags และ StackTagId (ตาม AimachineContext)
+            bool isUsedInInterns = await _context.InternTags.AnyAsync(it => it.StackTagId == id);
+            if (isUsedInInterns)
+            {
+                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกใช้งานอยู่ในประกาศรับนักศึกษาฝึกงาน (Interns)" });
+            }
 
-			var entity = await _context.TechStackTags.FindAsync(id);
+            // 3. (แถม) เช็คว่าถูกใช้ใน TechStackTag1 (ตารางจับคู่ Expertise) หรือไม่
+            // ถ้าตาราง tech_stack_tags เป็นตารางกลางที่เชื่อม Tag เข้ากับ TechStack หลัก
+            bool isUsedInTechs = await _context.TechStackTags1.AnyAsync(tt => tt.StackTagId == id);
+            if (isUsedInTechs)
+            {
+                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกผูกอยู่กับข้อมูล Tech Stack หลัก" });
+            }
 
-			if (entity == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
+            // ถ้าไม่ติดเงื่อนไขข้างบน -> ลบได้
+            _context.TechStackTags.Remove(entity);
+            await _context.SaveChangesAsync();
 
-			_context.TechStackTags.Remove(entity);
-			await _context.SaveChangesAsync();
-
-			return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
-		}
+            return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
+        }
 
         [HttpGet("by-department/{departmentId:int}")]
         public async Task<IActionResult> GetByDepartment(int departmentId)
@@ -145,7 +156,7 @@ namespace Aimachine.Controllers
             var data = await _context.TechStackTags
                 .AsNoTracking()
                 .Where(t => t.DepartmentId == departmentId)
-                .OrderBy(t => t.TechStackTitle) // เรียงตามตัวอักษร ก-ฮ, A-Z เพื่อให้หาง่าย
+                .OrderBy(t => t.TechStackTitle)
                 .Select(t => new
                 {
                     t.Id,
@@ -167,15 +178,12 @@ namespace Aimachine.Controllers
                     .Include(t => t.Department)
                     .AsQueryable();
 
-                // 1) filter departmentId (optional)
                 if (req.DepartmentId.HasValue)
                     query = query.Where(t => t.DepartmentId == req.DepartmentId.Value);
 
-                // 2) search keyword (optional) - ไม่สนตัวเล็ก/ใหญ่
                 if (!string.IsNullOrWhiteSpace(req.Q))
                 {
                     var kw = req.Q.Trim();
-
                     query = query.Where(t =>
                         EF.Functions.Collate((t.TechStackTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
                         || (t.Department != null &&

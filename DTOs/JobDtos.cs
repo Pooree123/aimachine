@@ -17,8 +17,6 @@ namespace Aimachine.DTOs
         public DateTime? DateEnd { get; set; }   // วันที่ปิดรับ
 
         public string Status { get; set; } = "Active";
-        public int CreatedBy { get; set; }
-
         public List<int>? TechStackTagIds { get; set; }
     }
 
@@ -36,7 +34,6 @@ namespace Aimachine.DTOs
         public DateTime? DateEnd { get; set; }
 
         public string Status { get; set; } = "Active";
-        public int UpdateBy { get; set; }
 
         public List<int>? TechStackTagIds { get; set; }
     }

@@ -60,7 +60,6 @@ public partial class AimachineContext : DbContext
     {
         if (!optionsBuilder.IsConfigured)
         {
-            // ใส่ไว้เป็น Fallback เผื่อรันแบบไม่มี Program.cs (แต่ปกติจะอ่านจาก appsettings.json)
             optionsBuilder.UseSqlServer("Server=DESKTOP-BL4MRCB\\SQLEXPRESS04;Database=aimachine;Trusted_Connection=True;TrustServerCertificate=True;");
         }
     }
@@ -135,7 +134,7 @@ public partial class AimachineContext : DbContext
                 .HasColumnName("profile_img");
             entity.Property(e => e.Status)
                 .HasMaxLength(255)
-                .HasDefaultValue("Active") // เอาชื่อ constraint ออกเพื่อความง่าย
+                .HasDefaultValue("Active") 
                 .HasColumnName("status");
 
             entity.HasOne(d => d.JobTitle).WithMany(p => p.Comments)
@@ -557,7 +556,7 @@ public partial class AimachineContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
 
-            // ✅ 1. เพิ่ม Mapping ให้ตรงกับ Database
+            // Map ชื่อคอลัมน์ให้ถูกต้อง
             entity.Property(e => e.DepartmentId).HasColumnName("department_id");
 
             entity.Property(e => e.Image)
@@ -585,9 +584,11 @@ public partial class AimachineContext : DbContext
                 .HasForeignKey(d => d.UpdateBy)
                 .HasConstraintName("FK__partners__update__06CD04F7");
 
+            // ✅ แก้ไขส่วนนี้ (สำคัญมาก)
             entity.HasOne(d => d.Department)
-                .WithMany()
-                .HasForeignKey(d => d.DepartmentId);
+                .WithMany(p => p.Partners) // 👈 ต้องระบุ p.Partners เพื่อเชื่อมกับ List ใน DepartmentType
+                .HasForeignKey(d => d.DepartmentId)
+                .HasConstraintName("FK_partners_department_types"); // (ถ้าใน DB จริงชื่ออื่น ให้แก้ string นี้ หรือลบบรรทัดนี้ออกถ้าไม่ซีเรียสเรื่องชื่อ Constraint)
         });
 
         modelBuilder.Entity<Solution>(entity =>

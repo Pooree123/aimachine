@@ -20,11 +20,15 @@ namespace Aimachine.Controllers
             _environment = environment;
         }
 
-        // ✅ Helper Function: ตรวจสอบไฟล์รูปภาพ
+        // ✅ Helper Function: เช็คไฟล์รูป + ขนาดไฟล์
         private bool IsAllowedImageFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return false;
 
+            // 1. เช็คขนาดไฟล์ (5 MB)
+            if (file.Length > 5 * 1024 * 1024) return false;
+
+            // 2. เช็คนามสกุลและ MIME type
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
             var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
 
@@ -35,7 +39,38 @@ namespace Aimachine.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetPublicPartners()
+        {
+            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
+
+            var data = await _context.DepartmentTypes
+                .AsNoTracking()
+                .Where(d => d.Partners.Any(p => p.Status == "Active"))
+                .Select(d => new
+                {
+                    DepartmentId = d.Id,
+                    DepartmentTitle = d.DepartmentTitle,
+                    Partners = d.Partners
+                        .Where(p => p.Status == "Active")
+                        .OrderByDescending(p => p.Id)
+                        .Select(p => new
+                        {
+                            p.Id,
+                            p.Name,
+                            p.Status,
+                            ImageUrl = string.IsNullOrEmpty(p.Image) ? null : $"{baseUrl}/uploads/partners/{p.Image}",
+                            p.CreatedAt
+                        })
+                        .ToList()
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        [HttpGet("admin")]
+        [Authorize]
+        public async Task<IActionResult> GetAdminPartners()
         {
             try
             {
@@ -100,8 +135,7 @@ namespace Aimachine.Controllers
                   })
                   .FirstOrDefaultAsync();
 
-                if (data == null)
-                    return NotFound(new { Message = "ไม่พบ Partner นี้" });
+                if (data == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
                 return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = data });
             }
@@ -120,70 +154,68 @@ namespace Aimachine.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ (Validation)
-            if (request.ImageFile != null)
+            // 🛡️ ตรวจสอบไฟล์รูปภาพ (ขนาด + ประเภท)
+            if (request.ImageFile != null && !IsAllowedImageFile(request.ImageFile))
             {
-                if (!IsAllowedImageFile(request.ImageFile))
-                {
-                    return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
-                }
+                return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
             }
 
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
             {
-                if (request.DepartmentId.HasValue)
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == request.DepartmentId))
-                        return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
-                }
-
-                if (request.CreatedBy.HasValue)
-                {
-                    var adminExists = await _context.AdminUsers.AnyAsync(a => a.Id == request.CreatedBy.Value);
-                    if (!adminExists) return BadRequest(new { Message = "created_by ไม่ถูกต้อง (ไม่พบ admin_users)" });
-                }
-
-                if (!string.IsNullOrWhiteSpace(request.Status) && request.Status != "Active" && request.Status != "inActive")
-                {
-                    return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive เท่านั้น" });
-                }
-
-                string newFileName = null;
-                if (request.ImageFile != null)
-                {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                    if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
-                    newFileName = Guid.NewGuid().ToString() + Path.GetExtension(request.ImageFile.FileName);
-                    string filePath = Path.Combine(uploadsFolder, newFileName);
-
-                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    if (request.DepartmentId.HasValue)
                     {
-                        await request.ImageFile.CopyToAsync(fileStream);
+                        if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == request.DepartmentId))
+                            return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
                     }
+
+                    if (!string.IsNullOrWhiteSpace(request.Status) && request.Status != "Active" && request.Status != "inActive")
+                        return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive เท่านั้น" });
+
+                    var entity = new Partner
+                    {
+                        Name = request.Name.Trim(),
+                        DepartmentId = request.DepartmentId,
+                        Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status,
+                        CreatedBy = currentUserId,
+                        UpdateBy = currentUserId,
+                        CreatedAt = DateTime.UtcNow.AddHours(7),
+                        UpdateAt = DateTime.UtcNow.AddHours(7)
+                    };
+
+                    _context.Partners.Add(entity);
+                    await _context.SaveChangesAsync();
+
+                    if (request.ImageFile != null)
+                    {
+                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
+                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+
+                        string newFileName = $"{Guid.NewGuid()}{Path.GetExtension(request.ImageFile.FileName)}";
+                        string filePath = Path.Combine(uploadsFolder, newFileName);
+
+                        using (var fileStream = new FileStream(filePath, FileMode.Create))
+                        {
+                            await request.ImageFile.CopyToAsync(fileStream);
+                        }
+
+                        entity.Image = newFileName;
+                        await _context.SaveChangesAsync();
+                    }
+
+                    await transaction.CommitAsync();
+                    return Ok(new { Message = "เพิ่มข้อมูลสำเร็จ", Id = entity.Id });
                 }
-
-                var entity = new Partner
+                catch (Exception ex)
                 {
-                    Name = request.Name.Trim(),
-                    DepartmentId = request.DepartmentId,
-                    Image = newFileName,
-                    Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status,
-                    CreatedBy = currentUserId,
-                    UpdateBy = currentUserId,
-                    CreatedAt = DateTime.UtcNow.AddHours(7),
-                    UpdateAt = DateTime.UtcNow.AddHours(7)
-                };
-
-                _context.Partners.Add(entity);
-                await _context.SaveChangesAsync();
-
-                return Ok(new { Message = "เพิ่มข้อมูลสำเร็จ", Id = entity.Id });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
-            }
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.InnerException?.Message ?? ex.Message });
+                }
+            });
         }
 
         [HttpPut("{id:int}")]
@@ -192,67 +224,70 @@ namespace Aimachine.Controllers
         {
             int currentUserId = User.GetUserId();
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่ (Validation)
-            if (request.ImageFile != null)
+            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่ (ขนาด + ประเภท)
+            if (request.ImageFile != null && !IsAllowedImageFile(request.ImageFile))
             {
-                if (!IsAllowedImageFile(request.ImageFile))
-                {
-                    return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
-                }
+                return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
             }
 
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync<IActionResult>(async () =>
             {
-                var entity = await _context.Partners.FindAsync(id);
-                if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
-
-                if (request.DepartmentId.HasValue && request.DepartmentId != entity.DepartmentId)
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == request.DepartmentId))
-                        return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
-                }
+                    var entity = await _context.Partners.FindAsync(id);
+                    if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
-                if (!string.IsNullOrWhiteSpace(request.Status) && request.Status != "Active" && request.Status != "inActive")
-                    return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
-
-                if (request.ImageFile != null)
-                {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                    if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
-                    // ลบไฟล์เก่า
-                    if (!string.IsNullOrEmpty(entity.Image))
+                    if (request.DepartmentId.HasValue && request.DepartmentId != entity.DepartmentId)
                     {
-                        string oldFilePath = Path.Combine(uploadsFolder, entity.Image);
-                        if (System.IO.File.Exists(oldFilePath)) System.IO.File.Delete(oldFilePath);
+                        if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == request.DepartmentId))
+                            return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
                     }
 
-                    // ลงไฟล์ใหม่
-                    string newFileName = Guid.NewGuid().ToString() + Path.GetExtension(request.ImageFile.FileName);
-                    string filePath = Path.Combine(uploadsFolder, newFileName);
+                    if (!string.IsNullOrWhiteSpace(request.Status) && request.Status != "Active" && request.Status != "inActive")
+                        return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
-                    using (var fileStream = new FileStream(filePath, FileMode.Create))
+                    entity.Name = request.Name.Trim();
+                    entity.DepartmentId = request.DepartmentId;
+                    if (!string.IsNullOrWhiteSpace(request.Status)) entity.Status = request.Status;
+                    entity.UpdateBy = currentUserId;
+                    entity.UpdateAt = DateTime.UtcNow.AddHours(7);
+
+                    if (request.ImageFile != null)
                     {
-                        await request.ImageFile.CopyToAsync(fileStream);
+                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
+                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+
+                        if (!string.IsNullOrEmpty(entity.Image))
+                        {
+                            string oldFilePath = Path.Combine(uploadsFolder, entity.Image);
+                            if (System.IO.File.Exists(oldFilePath)) System.IO.File.Delete(oldFilePath);
+                        }
+
+                        string newFileName = $"{Guid.NewGuid()}{Path.GetExtension(request.ImageFile.FileName)}";
+                        string filePath = Path.Combine(uploadsFolder, newFileName);
+
+                        using (var fileStream = new FileStream(filePath, FileMode.Create))
+                        {
+                            await request.ImageFile.CopyToAsync(fileStream);
+                        }
+
+                        entity.Image = newFileName;
                     }
 
-                    entity.Image = newFileName;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
                 }
-
-                entity.Name = request.Name.Trim();
-                entity.DepartmentId = request.DepartmentId;
-                if (!string.IsNullOrWhiteSpace(request.Status)) entity.Status = request.Status;
-
-                entity.UpdateBy = currentUserId;
-                entity.UpdateAt = DateTime.UtcNow.AddHours(7);
-
-                await _context.SaveChangesAsync();
-                return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
-            }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.InnerException?.Message ?? ex.Message });
+                }
+            });
         }
 
         [HttpDelete("{id:int}")]
@@ -264,10 +299,15 @@ namespace Aimachine.Controllers
                 var entity = await _context.Partners.FindAsync(id);
                 if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
-                if (!string.IsNullOrEmpty(entity.Image))
+                string imageToDelete = entity.Image;
+
+                _context.Partners.Remove(entity);
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrEmpty(imageToDelete))
                 {
                     string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                    string filePath = Path.Combine(uploadsFolder, entity.Image);
+                    string filePath = Path.Combine(uploadsFolder, imageToDelete);
 
                     if (System.IO.File.Exists(filePath))
                     {
@@ -275,10 +315,15 @@ namespace Aimachine.Controllers
                     }
                 }
 
-                _context.Partners.Remove(entity);
-                await _context.SaveChangesAsync();
-
                 return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
+            }
+            catch (DbUpdateException ex)
+            {
+                return BadRequest(new
+                {
+                    Message = "ไม่สามารถลบได้ เนื่องจากข้อมูลนี้ถูกใช้งานอยู่ในส่วนอื่นของระบบ",
+                    Error = ex.InnerException?.Message ?? ex.Message
+                });
             }
             catch (Exception ex)
             {
@@ -297,6 +342,11 @@ namespace Aimachine.Controllers
                     .AsNoTracking()
                     .Include(p => p.Department)
                     .AsQueryable();
+
+                if (req.DepartmentId.HasValue)
+                {
+                    query = query.Where(p => p.DepartmentId == req.DepartmentId.Value);
+                }
 
                 if (!string.IsNullOrWhiteSpace(req.Q))
                 {

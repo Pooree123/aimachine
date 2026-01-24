@@ -11,7 +11,6 @@ namespace Aimachine.DTOs
         [Required]
         public string TechStackTitle { get; set; } = string.Empty; // ✅ ชื่อใหม่
 
-        public int CreatedBy { get; set; }
     }
 
     // สำหรับ PUT (แก้ไขข้อมูล)
@@ -23,7 +22,6 @@ namespace Aimachine.DTOs
         [Required]
         public string TechStackTitle { get; set; } = string.Empty; // ✅ ชื่อใหม่
 
-        public int UpdateBy { get; set; }
     }
 
     public class TechStackTagSearchQueryDto

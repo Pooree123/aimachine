@@ -15,9 +15,6 @@ namespace Aimachine.DTOs
 
         public string Status { get; set; } = "Active";
 
-        public int CreatedBy { get; set; }
-
-        // ????????????????????????
         public List<IFormFile>? ImageFiles { get; set; }
     }
     public class UpdateSolutionDto
@@ -32,9 +29,6 @@ namespace Aimachine.DTOs
 
         public string Status { get; set; } = "Active";
 
-        public int UpdateBy { get; set; }
-
-        // ???????????????????????? (Append)
         public List<IFormFile>? NewImageFiles { get; set; }
     }
 

@@ -20,8 +20,6 @@ namespace Aimachine.DTOs
 
         public string? Status { get; set; } = "Active";
 
-        public int? CreatedBy { get; set; }
-
         // ✅ รองรับ upload หลายรูป
         public List<IFormFile>? Images { get; set; }
     }
@@ -43,8 +41,6 @@ namespace Aimachine.DTOs
         public string? Description { get; set; }
 
         public string? Status { get; set; }
-
-        public int? UpdateBy { get; set; }
     }
 
     public class EventSearchQueryDto

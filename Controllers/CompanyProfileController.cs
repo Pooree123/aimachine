@@ -43,7 +43,6 @@ public class CompanyProfileController : ControllerBase
         return Ok(cp);
     }
 
-    // PUT: api/companyprofile
     [HttpPut]
     [Authorize]
     public async Task<IActionResult> Update([FromBody] UpdateCompanyProfileDto dto)
@@ -57,14 +56,32 @@ public class CompanyProfileController : ControllerBase
 
             if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile (ID 1)" });
 
-            // (ส่วนเช็ค AdminUsers เอาออกก็ได้ถ้าไม่ได้ใช้ หรือถ้าใช้ก็เก็บไว้)
-            // if (dto.UpdateBy.HasValue && !await _context.AdminUsers.AnyAsync(a => a.Id == dto.UpdateBy.Value))
-            //     return BadRequest(new { Message = "update_by ไม่ถูกต้อง" });
-
             cp.CompannyName = dto.CompannyName?.Trim();
             cp.Description = dto.Description?.Trim();
             cp.Email = dto.Email?.Trim();
-            cp.Phone = dto.Phone?.Trim();
+
+            // ---------------------------------------------------------
+            // ✅ แก้ไขส่วน Phone: ตัดขีด/สัญลักษณ์ออก เอาแค่เลข 10 หลัก
+            // ---------------------------------------------------------
+            if (!string.IsNullOrEmpty(dto.Phone))
+            {
+                // 1. กรองเอาเฉพาะตัวเลข (0-9) ตัด - หรือ space หรือ () ออกหมด
+                string cleanedPhone = new string(dto.Phone.Where(char.IsDigit).ToArray());
+
+                // 2. ตรวจสอบว่าต้องมี 10 หลักเท่านั้น (ถ้าไม่ครบ หรือเกิน ให้แจ้ง Error)
+                if (cleanedPhone.Length != 10)
+                {
+                    return BadRequest(new { Message = "เบอร์โทรศัพท์ไม่ถูกต้อง กรุณาระบุตัวเลข 10 หลัก" });
+                }
+
+                cp.Phone = cleanedPhone;
+            }
+            else
+            {
+                cp.Phone = null; // กรณีส่งมาเป็นค่าว่าง ให้เคลียร์ค่าใน DB
+            }
+            // ---------------------------------------------------------
+
             cp.Address = dto.Address?.Trim();
             cp.GoogleUrl = dto.GoogleUrl?.Trim();
             cp.FacebookUrl = dto.FacebookUrl?.Trim();
@@ -75,7 +92,7 @@ public class CompanyProfileController : ControllerBase
 
             cp.LineId = dto.LineId?.Trim();
 
-            cp.UpdateBy = currentUserId; // ใช้ ID จาก Token เสมอ
+            cp.UpdateBy = currentUserId;
             cp.UpdateAt = DateTime.UtcNow.AddHours(7);
 
             await _context.SaveChangesAsync();

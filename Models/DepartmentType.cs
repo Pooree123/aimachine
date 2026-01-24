@@ -28,4 +28,6 @@ public partial class DepartmentType
     public virtual ICollection<TechStackTag> TechStackTags { get; set; } = new List<TechStackTag>();
 
     public virtual AdminUser? UpdateByNavigation { get; set; }
+
+    public virtual ICollection<Partner> Partners { get; set; } = new List<Partner>();
 }

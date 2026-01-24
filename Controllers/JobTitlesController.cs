@@ -77,6 +77,17 @@ public class JobTitlesController : ControllerBase
         if (entity == null)
             return NotFound(new { Message = "ไม่พบ Job Title" });
 
+        // เช็คและอัปเดต DepartmentId
+        if (entity.DepartmentId != dto.DepartmentId)
+        {
+            bool deptExists = await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId);
+            if (!deptExists)
+            {
+                return BadRequest(new { Message = "ไม่พบ department_type ที่ระบุ" });
+            }
+            entity.DepartmentId = dto.DepartmentId;
+        }
+
         entity.JobsTitle = dto.JobsTitle.Trim();
         entity.UpdateBy = currentUserId;
         entity.UpdateAt = DateTime.UtcNow.AddHours(7);
@@ -85,6 +96,7 @@ public class JobTitlesController : ControllerBase
         return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
     }
 
+    // ✅ ปรับปรุง Delete: เช็คการใช้งานก่อนลบ
     [HttpDelete("{id:int}")]
     [Authorize]
     public async Task<IActionResult> Delete(int id)
@@ -93,13 +105,32 @@ public class JobTitlesController : ControllerBase
         if (entity == null)
             return NotFound(new { Message = "ไม่พบ Job Title" });
 
+        // 1. เช็คว่าถูกใช้ใน Jobs (ประกาศงาน) หรือไม่
+        bool isUsedInJobs = await _context.Jobs.AnyAsync(j => j.JobTitleId == id);
+        if (isUsedInJobs)
+        {
+            return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Job Title นี้ถูกใช้งานอยู่ในประกาศรับสมัครงาน (Jobs)" });
+        }
+
+        // 2. เช็คว่าถูกใช้ใน Interns (ฝึกงาน) หรือไม่
+        bool isUsedInInterns = await _context.Interns.AnyAsync(i => i.JobTitleId == id);
+        if (isUsedInInterns)
+        {
+            return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Job Title นี้ถูกใช้งานอยู่ในประกาศฝึกงาน (Interns)" });
+        }
+
+        // 3. เช็คว่าถูกใช้ใน Comments (รีวิว/Testimonials) หรือไม่
+        bool isUsedInComments = await _context.Comments.AnyAsync(c => c.JobTitleId == id);
+        if (isUsedInComments)
+        {
+            return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Job Title นี้ถูกใช้งานอยู่ในรีวิว (Comments)" });
+        }
+
         _context.JobTitles.Remove(entity);
         await _context.SaveChangesAsync();
         return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
     }
 
-    // ✅ SEARCH
-    // GET: /api/job-titles/search?q=...&departmentId=...
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] JobTitleSearchQueryDto req)
     {
@@ -110,18 +141,16 @@ public class JobTitlesController : ControllerBase
                 .Include(j => j.Department)
                 .AsQueryable();
 
-            // filter department
             if (req.DepartmentId.HasValue)
                 query = query.Where(j => j.DepartmentId == req.DepartmentId.Value);
 
-            // keyword
             if (!string.IsNullOrWhiteSpace(req.Q))
             {
                 var kw = req.Q.Trim();
+                // ใช้ Contains แทน Collate เพื่อความปลอดภัย
                 query = query.Where(j =>
-                    EF.Functions.Collate((j.JobsTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
-                    (j.Department != null &&
-                     EF.Functions.Collate((j.Department.DepartmentTitle ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw))
+                    (j.JobsTitle != null && j.JobsTitle.Contains(kw)) ||
+                    (j.Department != null && j.Department.DepartmentTitle != null && j.Department.DepartmentTitle.Contains(kw))
                 );
             }
 

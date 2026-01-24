@@ -30,6 +30,7 @@ namespace Aimachine.Controllers
                     x.Id,
                     x.EventTitle,
                     x.CreatedBy,
+                    CreatedByName = x.CreatedByNavigation != null ? x.CreatedByNavigation.FullName : "",
                     x.UpdateBy,
                     x.CreatedAt,
                     x.UpdateAt
@@ -63,9 +64,9 @@ namespace Aimachine.Controllers
 
         [HttpPost]
         [Authorize]
-        public async Task<IActionResult> Create([FromBody] CreateEventCategoryDto body) 
+        public async Task<IActionResult> Create([FromBody] CreateEventCategoryDto body)
         {
-            int currentUserId = User.GetUserId();
+            int currentUserId = User.GetUserId(); // ✅ ใช้ ID จาก Token
 
             if (!ModelState.IsValid)
             {
@@ -76,12 +77,11 @@ namespace Aimachine.Controllers
             {
                 var now = DateTime.UtcNow.AddHours(7);
 
-                // Map ค่าจาก DTO ไปยัง Entity เพื่อเตรียมบันทึกลงฐานข้อมูล
                 var entity = new EventCategory
                 {
                     EventTitle = body.EventTitle.Trim(),
-                    CreatedBy = body.CreatedBy,
-                    UpdateBy = currentUserId, // เริ่มต้นให้ค่า UpdateBy เท่ากับคนสร้าง
+                    CreatedBy = currentUserId,
+                    UpdateBy = currentUserId,
                     CreatedAt = now,
                     UpdateAt = now
                 };
@@ -107,9 +107,9 @@ namespace Aimachine.Controllers
 
         [HttpPut("{id:int}")]
         [Authorize]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateEventCategoryDto body) // เปลี่ยนจาก EventCategory เป็น DTO
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateEventCategoryDto body)
         {
-            int currentUserId = User.GetUserId();
+            int currentUserId = User.GetUserId(); // ✅ ใช้ ID จาก Token
 
             if (!ModelState.IsValid)
             {
@@ -122,7 +122,6 @@ namespace Aimachine.Controllers
                 if (entity == null)
                     return NotFound(new { Message = "ไม่พบ Category" });
 
-                // อัปเดตข้อมูลจาก DTO ลงใน Entity
                 entity.EventTitle = body.EventTitle.Trim();
                 entity.UpdateBy = currentUserId;
                 entity.UpdateAt = DateTime.UtcNow.AddHours(7);
@@ -136,22 +135,46 @@ namespace Aimachine.Controllers
             }
         }
 
+        [HttpDelete("{id:int}")]
+        [Authorize]
+        public async Task<IActionResult> Delete(int id)
+        {
+            try
+            {
+                var entity = await _context.EventCategories.FindAsync(id);
+                if (entity == null)
+                    return NotFound(new { Message = "ไม่พบ Category" });
+
+                _context.EventCategories.Remove(entity);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
+            }
+            catch (DbUpdateException ex)
+            {
+                return BadRequest(new
+                {
+                    Message = "ลบข้อมูลไม่สำเร็จ (Category นี้ถูกใช้งานอยู่ในระบบ)",
+                    Error = ex.InnerException?.Message ?? ex.Message
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
+            }
+        }
+
         // ✅ GET: /api/event-categories/search?q=chr
         [HttpGet("search")]
-        public async Task<IActionResult> Search([FromQuery] string? q)
+        public async Task<IActionResult> Search([FromQuery] EventCategorySearchQueryDto req)
         {
             var query = _context.EventCategories.AsNoTracking().AsQueryable();
-            
-            if (!string.IsNullOrWhiteSpace(q))
-            {
-                var kw = q.Trim();
 
-                query = query.Where(x =>
-                    EF.Functions.Collate(
-                        (x.EventTitle ?? ""),
-                        "SQL_Latin1_General_CP1_CI_AS"
-                    ).Contains(kw)
-                );
+            if (!string.IsNullOrWhiteSpace(req.Q))
+            {
+                var kw = req.Q.Trim();
+                // ✅ ใช้ Contains ธรรมดา เพื่อความปลอดภัย
+                query = query.Where(x => x.EventTitle != null && x.EventTitle.Contains(kw));
             }
 
             var data = await query
@@ -170,7 +193,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ค้นหาสำเร็จ", Data = data });
         }
 
-
         [HttpGet("dropdown")]
         public async Task<IActionResult> GetDropdown()
         {
@@ -178,11 +200,11 @@ namespace Aimachine.Controllers
             {
                 var data = await _context.EventCategories
                     .AsNoTracking()
-                    .OrderBy(x => x.EventTitle) // เรียงลำดับตามตัวอักษร
+                    .OrderBy(x => x.EventTitle)
                     .Select(x => new EventCategoryDropdownDto
                     {
                         Value = x.Id,
-                        Label = x.EventTitle ?? "ไม่ระบุหัวข้อ" // จัดการกรณีข้อมูลเป็น Null
+                        Label = x.EventTitle ?? "ไม่ระบุหัวข้อ"
                     })
                     .ToListAsync();
 
@@ -194,7 +216,6 @@ namespace Aimachine.Controllers
             }
             catch (Exception ex)
             {
-                // ส่งข้อความ Error กลับไปเพื่อให้รู้ว่าเกิดปัญหาที่จุดไหน
                 return BadRequest(new
                 {
                     Message = "เกิดข้อผิดพลาดในการโหลดข้อมูล",
@@ -202,6 +223,5 @@ namespace Aimachine.Controllers
                 });
             }
         }
-
     }
 }

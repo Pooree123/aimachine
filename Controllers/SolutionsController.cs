@@ -20,11 +20,15 @@ namespace Aimachine.Controllers
             _environment = environment;
         }
 
-        // ✅ Helper Function เช็คไฟล์รูป
+        // ✅ Helper Function: เช็คไฟล์รูป + ขนาดไฟล์
         private bool IsAllowedImageFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return false;
 
+            // 1. เช็คขนาดไฟล์ (5 MB = 5 * 1024 * 1024 bytes)
+            if (file.Length > 5 * 1024 * 1024) return false;
+
+            // 2. เช็คนามสกุลและ MIME type
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
             var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
 
@@ -39,17 +43,15 @@ namespace Aimachine.Controllers
         {
             var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
-            var data = await _context.DepartmentTypes // 1. เริ่ม query จาก Department
+            var data = await _context.DepartmentTypes
                 .AsNoTracking()
                 .Where(d => d.Solutions.Any(s => s.Status == "Active"))
                 .Select(d => new
                 {
                     DepartmentId = d.Id,
                     DepartmentTitle = d.DepartmentTitle,
-
-                    // ✅ 3. ส่งเป็นชุด List ของ Solutions ที่สังกัด Department นี้
                     Solutions = d.Solutions
-                        .Where(s => s.Status == "Active") // เอาเฉพาะ Active
+                        .Where(s => s.Status == "Active")
                         .OrderByDescending(s => s.Id)
                         .Select(s => new
                         {
@@ -58,9 +60,7 @@ namespace Aimachine.Controllers
                             s.Name,
                             s.Description,
                             s.Status,
-                            // DepartmentTitle ใส่ไว้ในแม่แล้ว แต่ถ้าอยากให้ลูกมีด้วยก็ใส่ได้ครับ
                             DepartmentTitle = d.DepartmentTitle,
-
                             Images = s.SolutionImgs
                                 .Where(img => img.IsCover == true)
                                 .Select(img => new
@@ -70,7 +70,6 @@ namespace Aimachine.Controllers
                                     img.IsCover
                                 })
                                 .ToList(),
-
                             s.CreatedAt,
                             s.UpdateAt
                         })
@@ -81,16 +80,13 @@ namespace Aimachine.Controllers
             return Ok(data);
         }
 
-        // ✅ 2. สำหรับ Admin (หลังบ้าน) - ดึงทั้งหมด (All Status)
-        // เข้าผ่าน: GET api/solutions/admin
         [HttpGet("admin")]
-        [Authorize] // 👈 ต้อง Login ก่อนถึงจะเข้าได้
+        [Authorize]
         public async Task<IActionResult> GetAdminSolutions()
         {
             var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
             var data = await _context.Solutions
                 .AsNoTracking()
-                // ไม่ต้องมี Where Status เพื่อให้เห็นทั้งหมด
                 .Include(s => s.Department)
                 .Include(s => s.SolutionImgs)
                 .OrderByDescending(s => s.Id)
@@ -102,17 +98,16 @@ namespace Aimachine.Controllers
                     s.Description,
                     s.Status,
                     DepartmentTitle = s.Department != null ? s.Department.DepartmentTitle : "",
-
                     Images = s.SolutionImgs
-                        .Where(img => img.IsCover == true)
+                        .OrderBy(img => img.OrderId)
                         .Select(img => new
                         {
                             img.Id,
                             Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
-                            img.IsCover
+                            img.IsCover,
+                            img.OrderId
                         })
                         .ToList(),
-
                     s.CreatedAt,
                     s.UpdateAt
                 })
@@ -161,14 +156,14 @@ namespace Aimachine.Controllers
             if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
                 return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ (Validation)
+            // 🛡️ ตรวจสอบไฟล์รูปภาพ
             if (dto.ImageFiles != null && dto.ImageFiles.Count > 0)
             {
                 foreach (var img in dto.ImageFiles)
                 {
                     if (!IsAllowedImageFile(img))
                     {
-                        return BadRequest(new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
+                        return BadRequest(new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
                     }
                 }
             }
@@ -180,7 +175,6 @@ namespace Aimachine.Controllers
                 using var transaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    // 1. บันทึก Solution
                     var solution = new Solution
                     {
                         DepartmentId = dto.DepartmentId,
@@ -196,7 +190,6 @@ namespace Aimachine.Controllers
                     _context.Solutions.Add(solution);
                     await _context.SaveChangesAsync();
 
-                    // 2. บันทึกรูปภาพ
                     if (dto.ImageFiles != null && dto.ImageFiles.Count > 0)
                     {
                         string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "solutions");
@@ -246,14 +239,14 @@ namespace Aimachine.Controllers
             int currentUserId = User.GetUserId();
             var strategy = _context.Database.CreateExecutionStrategy();
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่ (Validation)
+            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่
             if (dto.NewImageFiles != null && dto.NewImageFiles.Count > 0)
             {
                 foreach (var img in dto.NewImageFiles)
                 {
                     if (!IsAllowedImageFile(img))
                     {
-                        return BadRequest(new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
+                        return BadRequest(new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
                     }
                 }
             }
@@ -275,7 +268,6 @@ namespace Aimachine.Controllers
                             return BadRequest(new { Message = "ไม่พบ Department ID ที่ระบุ" });
                     }
 
-                    // อัปเดต Text
                     entity.DepartmentId = dto.DepartmentId;
                     entity.Name = dto.Name;
                     entity.Description = dto.Description;
@@ -283,29 +275,23 @@ namespace Aimachine.Controllers
                     entity.UpdateBy = currentUserId;
                     entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
-                    // ✅ อัปเดต รูปภาพ (Logic ใหม่: แทนที่รูปปก)
                     if (dto.NewImageFiles != null && dto.NewImageFiles.Count > 0)
                     {
                         string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "solutions");
                         if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
 
-                        // 1. หาและลบรูปปกเก่า
                         var oldCover = entity.SolutionImgs.FirstOrDefault(img => img.IsCover == true);
                         if (oldCover != null)
                         {
-                            // ลบไฟล์จริง
                             if (!string.IsNullOrEmpty(oldCover.Image))
                             {
                                 string oldPath = Path.Combine(_environment.WebRootPath, oldCover.Image);
                                 if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
                             }
-                            // ลบจาก Database
                             _context.SolutionImgs.Remove(oldCover);
                         }
 
-                        // 2. เพิ่มรูปใหม่ และตั้งรูปแรกเป็น Cover
                         bool isFirstNewImage = true;
-
                         foreach (var file in dto.NewImageFiles)
                         {
                             if (file.Length > 0)
@@ -324,7 +310,6 @@ namespace Aimachine.Controllers
                                     IsCover = isFirstNewImage,
                                     OrderId = 0
                                 };
-
                                 _context.SolutionImgs.Add(imgEntity);
                                 isFirstNewImage = false;
                             }
@@ -380,7 +365,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // DELETE Image
         [HttpDelete("image/{imgId:int}")]
         public async Task<IActionResult> DeleteImage(int imgId)
         {
@@ -399,7 +383,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ลบรูปภาพสำเร็จ" });
         }
 
-        // GET: /api/solutions/search?departmentTitle=Automation
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] SolutionSearchQueryDto req)
         {
@@ -412,9 +395,6 @@ namespace Aimachine.Controllers
                     .Include(s => s.Department)
                     .Include(s => s.SolutionImgs)
                     .AsQueryable();
-
-                // ⚠️ (Optional) ถ้าหน้าบ้าน Search ก็อาจจะอยากให้เจอแค่ Active เหมือนกัน
-                // query = query.Where(s => s.Status == "Active");
 
                 if (req.DepartmentId.HasValue)
                 {

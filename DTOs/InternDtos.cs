@@ -10,11 +10,10 @@ namespace Aimachine.DTOs
         public int? TotalPositions { get; set; }
         public DateTime? DateOpen { get; set; }
         public DateTime? DateEnd { get; set; }
-        public string Status { get; set; } = "Active";
-        public int CreatedBy { get; set; }
+        public string? Status { get; set; } = "Active"; // Default Active
 
-        // ✅ รับเป็น List ของ ID (เช่น [1, 5, 8]) เพื่อเอาไปบันทึกลงตาราง InternTag
-        public List<int> StackTagIds { get; set; } = new List<int>();
+        // ✅ รับเป็น List ของ ID เพื่อเอาไปบันทึกลงตาราง InternTag
+        public List<int>? StackTagIds { get; set; }
     }
 
     public class UpdateInternDto
@@ -25,11 +24,10 @@ namespace Aimachine.DTOs
         public int? TotalPositions { get; set; }
         public DateTime? DateOpen { get; set; }
         public DateTime? DateEnd { get; set; }
-        public string Status { get; set; } = "Active";
-        public int UpdateBy { get; set; }
+        public string? Status { get; set; } = "Active";
 
-        // ✅ รับ List ใหม่มาทับของเดิม
-        public List<int> StackTagIds { get; set; } = new List<int>();
+        // ✅ รับ List ใหม่มาทับของเดิม (ถ้าส่งมา)
+        public List<int>? StackTagIds { get; set; }
     }
 
     public class InternSearchQueryDto

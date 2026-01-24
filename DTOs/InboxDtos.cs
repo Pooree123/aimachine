@@ -18,8 +18,6 @@ namespace Aimachine.DTOs
 
         [EmailAddress, MaxLength(100)]
         public string? Email { get; set; }
-
-        public int? CreatedBy { get; set; }
     }
 
     public class UpdateInboxDto
@@ -38,8 +36,6 @@ namespace Aimachine.DTOs
 
         [EmailAddress, MaxLength(100)]
         public string? Email { get; set; }
-
-        public int? UpdateBy { get; set; }
     }
 
     public class InboxSearchQueryDto

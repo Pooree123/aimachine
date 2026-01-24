@@ -17,8 +17,6 @@ namespace Aimachine.DTOs
 
         [MaxLength(255)]
         public string? Status { get; set; } = "Active";
-
-        public int? CreatedBy { get; set; }
     }
 
     public class UpdatePartnerDto
@@ -35,12 +33,11 @@ namespace Aimachine.DTOs
 
         [MaxLength(255)]
         public string? Status { get; set; }
-
-        public int? UpdateBy { get; set; }
     }
 
     public class PartnerSearchQueryDto
     {
         public string? Q { get; set; }
+        public int? DepartmentId { get; set; }
     }
 }
