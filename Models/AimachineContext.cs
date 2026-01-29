@@ -36,9 +36,6 @@ public partial class AimachineContext : DbContext
     public virtual DbSet<TechStackTag1> TechStackTags1 { get; set; }
     public virtual DbSet<Topic> Topics { get; set; }
 
-    // ❌ ลบ OnConfiguring ทิ้ง เพื่อไปใช้ใน Program.cs แทน
-    // protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) ...
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AdminUser>(entity =>
