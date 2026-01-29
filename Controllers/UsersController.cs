@@ -100,10 +100,10 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
-        [Authorize]
+        //[Authorize]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
-            int currentUserId = User.GetUserId();
+            //int currentUserId = User.GetUserId();
             var username = request.Username.Trim();
 
             // 1. ✅ เช็คอักขระพิเศษใน Username
@@ -133,8 +133,8 @@ namespace Aimachine.Controllers
                 FullName = request.FullName?.Trim(),
                 Status = "Active",
                 Deleteflag = false,
-                CreatedBy = currentUserId,
-                UpdateBy = currentUserId,
+                //CreatedBy = currentUserId,
+                //UpdateBy = currentUserId,
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
             };
@@ -184,11 +184,19 @@ namespace Aimachine.Controllers
         [Authorize]
         public async Task<IActionResult> DeleteUser(int id)
         {
+            int currentUserId = User.GetUserId();
+
+            if (id == currentUserId)
+            {
+                return BadRequest(new { Message = "ไม่สามารถลบบัญชีของตัวเองได้" });
+            }
+
             var user = await _context.AdminUsers.FindAsync(id);
-            if (user == null) return NotFound();
+            if (user == null) return NotFound(new { Message = "ไม่พบผู้ใช้งาน" });
 
             user.Deleteflag = true;
             user.UpdateAt = DateTime.UtcNow.AddHours(7);
+            user.UpdateBy = currentUserId; 
 
             await _context.SaveChangesAsync();
             return Ok(new { Message = "ลบผู้ใช้งานสำเร็จ (Soft Delete)" });
