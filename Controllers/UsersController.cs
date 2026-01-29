@@ -100,10 +100,10 @@ namespace Aimachine.Controllers
         }
 
         [HttpPost]
-        //[Authorize]
+        [Authorize]
         public async Task<IActionResult> CreateUser([FromBody] CreateUserDto request)
         {
-            //int currentUserId = User.GetUserId();
+            int currentUserId = User.GetUserId();
             var username = request.Username.Trim();
 
             // 1. ✅ เช็คอักขระพิเศษใน Username
@@ -133,8 +133,8 @@ namespace Aimachine.Controllers
                 FullName = request.FullName?.Trim(),
                 Status = "Active",
                 Deleteflag = false,
-                //CreatedBy = currentUserId,
-                //UpdateBy = currentUserId,
+                CreatedBy = currentUserId,
+                UpdateBy = currentUserId,
                 CreatedAt = DateTime.UtcNow.AddHours(7),
                 UpdateAt = DateTime.UtcNow.AddHours(7)
             };
