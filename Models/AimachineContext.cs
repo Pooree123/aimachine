@@ -158,7 +158,6 @@ public partial class AimachineContext : DbContext
             entity.ToTable("inbox");
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp without time zone");
-            entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.Deleteflag).HasDefaultValue(false).HasColumnName("deleteflag");
             entity.Property(e => e.Email).HasMaxLength(100).HasColumnName("email");
             entity.Property(e => e.Message).HasMaxLength(300).HasColumnName("message");
@@ -166,11 +165,8 @@ public partial class AimachineContext : DbContext
             entity.Property(e => e.Phone).HasMaxLength(10).HasColumnName("phone");
             entity.Property(e => e.TitleId).HasColumnName("title_id");
             entity.Property(e => e.UpdateAt).HasColumnName("update_at").HasColumnType("timestamp without time zone");
-            entity.Property(e => e.UpdateBy).HasColumnName("update_by");
 
-            entity.HasOne(d => d.CreatedByNavigation).WithMany(p => p.InboxCreatedByNavigations).HasForeignKey(d => d.CreatedBy);
             entity.HasOne(d => d.Title).WithMany(p => p.Inboxes).HasForeignKey(d => d.TitleId).OnDelete(DeleteBehavior.ClientSetNull);
-            entity.HasOne(d => d.UpdateByNavigation).WithMany(p => p.InboxUpdateByNavigations).HasForeignKey(d => d.UpdateBy);
         });
 
         modelBuilder.Entity<Intern>(entity =>

@@ -204,8 +204,7 @@ namespace Aimachine.Controllers
                         x.Message,
                         x.Phone,
                         x.Email,
-                        x.CreatedAt,
-                        x.UpdateAt
+                        x.CreatedAt
                     })
                     .ToListAsync();
 
