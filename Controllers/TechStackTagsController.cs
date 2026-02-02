@@ -128,7 +128,7 @@ namespace Aimachine.Controllers
             }
             catch (DbUpdateException ex)
             {
-                return Conflict(new
+                return StatusCode(500, new
                 {
                     Message = "ไม่สามารถลบ Tech Stack นี้ได้ เนื่องจากถูกใช้งานอยู่ในระบบ (เช่น Jobs, Interns หรือ Tech Stack หลัก)",
                 });

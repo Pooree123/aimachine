@@ -63,6 +63,7 @@ namespace Aimachine.Controllers
             var baseUrl = BaseUrl();
             var data = await _context.Events
                 .AsNoTracking()
+                .Where(e => e.Status == "Active")
                 .OrderByDescending(e => e.Id)
                 .Select(e => new
                 {
@@ -127,7 +128,7 @@ namespace Aimachine.Controllers
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             if (!string.IsNullOrWhiteSpace(body.Status) && body.Status != "Active" && body.Status != "inActive")
-                return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
+                return StatusCode(500, new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
             // 🛡️ ตรวจสอบไฟล์รูปภาพ (ถ้ามีการส่งมา)
             if (body.Images != null && body.Images.Count > 0)
@@ -136,7 +137,7 @@ namespace Aimachine.Controllers
                 {
                     if (!IsAllowedImageFile(img))
                     {
-                        return BadRequest(new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
+                        return StatusCode(500, new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
                     }
                 }
             }
@@ -184,7 +185,7 @@ namespace Aimachine.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
+                return StatusCode(500, new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
 
@@ -196,7 +197,7 @@ namespace Aimachine.Controllers
             int currentUserId = User.GetUserId();
             if (!ModelState.IsValid) return BadRequest(ModelState);
             if (!string.IsNullOrWhiteSpace(body.Status) && body.Status != "Active" && body.Status != "inActive")
-                return BadRequest(new { Message = "Status ต้องเป็น Active หรือ inActive" });
+                return StatusCode(500, new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
             try
             {
@@ -217,7 +218,7 @@ namespace Aimachine.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
+                return StatusCode(500, new { Message = "แก้ไขข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
 
@@ -230,14 +231,14 @@ namespace Aimachine.Controllers
             if (ev == null) return NotFound(new { Message = "ไม่พบ Event" });
 
             if (images == null || images.Count == 0)
-                return BadRequest(new { Message = "ไม่มีไฟล์" });
+                return StatusCode(500, new { Message = "ไม่มีไฟล์" });
 
             // 🛡️ ตรวจสอบไฟล์รูปภาพ
             foreach (var img in images)
             {
                 if (!IsAllowedImageFile(img))
                 {
-                    return BadRequest(new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
+                    return StatusCode(500, new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
                 }
             }
 

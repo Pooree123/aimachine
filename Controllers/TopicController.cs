@@ -170,7 +170,7 @@ namespace Aimachine.Controllers
             }
             catch (DbUpdateException ex)
             {
-                return Conflict(new
+                return StatusCode(500, new
                 {
                     Message = "ไม่สามารถลบ Topic นี้ได้ เนื่องจากถูกใช้งานอยู่ในระบบ",
                 });

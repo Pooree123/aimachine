@@ -152,7 +152,7 @@ namespace Aimachine.Controllers
             }
             catch (DbUpdateException ex)
             {
-                return Conflict(new
+                return StatusCode(500, new
                 {
                     Message = "ลบข้อมูลไม่สำเร็จ เนื่องจาก Category นี้ถูกใช้งานอยู่ในระบบ",
                 });

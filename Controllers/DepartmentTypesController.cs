@@ -114,14 +114,14 @@ namespace Aimachine.Controllers
 
             if (entity.CanDelete.HasValue && !entity.CanDelete.Value)
             {
-                return Conflict(new { Message = "ไม่สามารถลบข้อมูลนี้ได้ (System Default)" });
+                return StatusCode(500, new { Message = "ไม่สามารถลบข้อมูลนี้ได้ (System Default)" });
             }
 
             if (await _context.JobTitles.AnyAsync(j => j.DepartmentId == id) ||
                 await _context.Partners.AnyAsync(p => p.DepartmentId == id) ||
                 await _context.Solutions.AnyAsync(s => s.DepartmentId == id))
             {
-                return Conflict(new { Message = "ไม่สามารถลบได้ เนื่องจากข้อมูลนี้ถูกใช้งานอยู่ในส่วนอื่น (JobTitle, Partner, หรือ Solution)" });
+                return StatusCode(500, new { Message = "ไม่สามารถลบได้ เนื่องจากข้อมูลนี้ถูกใช้งานอยู่ในส่วนอื่น (JobTitle, Partner, หรือ Solution)" });
             }
 
             _context.DepartmentTypes.Remove(entity);
