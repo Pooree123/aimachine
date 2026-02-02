@@ -101,34 +101,32 @@ public class JobTitlesController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Delete(int id)
     {
-        var entity = await _context.JobTitles.FindAsync(id);
-        if (entity == null)
-            return NotFound(new { Message = "ไม่พบ Job Title" });
-
-        // 1. เช็คว่าถูกใช้ใน Jobs (ประกาศงาน) หรือไม่
-        bool isUsedInJobs = await _context.Jobs.AnyAsync(j => j.JobTitleId == id);
-        if (isUsedInJobs)
+        try
         {
-            return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Job Title นี้ถูกใช้งานอยู่ในประกาศรับสมัครงาน (Jobs)" });
-        }
+            var entity = await _context.JobTitles.FindAsync(id);
+            if (entity == null)
+                return NotFound(new { Message = "ไม่พบ Job Title" });
 
-        // 2. เช็คว่าถูกใช้ใน Interns (ฝึกงาน) หรือไม่
-        bool isUsedInInterns = await _context.Interns.AnyAsync(i => i.JobTitleId == id);
-        if (isUsedInInterns)
+            _context.JobTitles.Remove(entity);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
+        }
+        catch (DbUpdateException ex)
         {
-            return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Job Title นี้ถูกใช้งานอยู่ในประกาศฝึกงาน (Interns)" });
+            return Conflict(new
+            {
+                Message = "ไม่สามารถลบ Job Title นี้ได้ เนื่องจากถูกใช้งานอยู่ในระบบ (เช่น ประกาศงาน, ฝึกงาน หรือรีวิว)",
+            });
         }
-
-        // 3. เช็คว่าถูกใช้ใน Comments (รีวิว/Testimonials) หรือไม่
-        bool isUsedInComments = await _context.Comments.AnyAsync(c => c.JobTitleId == id);
-        if (isUsedInComments)
+        catch (Exception ex)
         {
-            return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Job Title นี้ถูกใช้งานอยู่ในรีวิว (Comments)" });
+            return StatusCode(500, new
+            {
+                Message = "เกิดข้อผิดพลาดภายในระบบ",
+                Error = ex.Message
+            });
         }
-
-        _context.JobTitles.Remove(entity);
-        await _context.SaveChangesAsync();
-        return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
     }
 
     [HttpGet("search")]

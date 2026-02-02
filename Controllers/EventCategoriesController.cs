@@ -152,15 +152,18 @@ namespace Aimachine.Controllers
             }
             catch (DbUpdateException ex)
             {
-                return BadRequest(new
+                return Conflict(new
                 {
-                    Message = "ลบข้อมูลไม่สำเร็จ (Category นี้ถูกใช้งานอยู่ในระบบ)",
-                    Error = ex.InnerException?.Message ?? ex.Message
+                    Message = "ลบข้อมูลไม่สำเร็จ เนื่องจาก Category นี้ถูกใช้งานอยู่ในระบบ",
                 });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { Message = "ลบข้อมูลไม่สำเร็จ", Error = ex.Message });
+                return StatusCode(500, new
+                {
+                    Message = "เกิดข้อผิดพลาดภายในระบบ",
+                    Error = ex.Message
+                });
             }
         }
 

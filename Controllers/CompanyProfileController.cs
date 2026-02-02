@@ -30,7 +30,6 @@ public class CompanyProfileController : ControllerBase
               x.Address,
               x.GoogleUrl,
               x.FacebookUrl,
-              // ✅ เพิ่ม 2 บรรทัดนี้ใน Select
               x.YoutubeUrl,
               x.TiktokUrl,
               x.LineId,
@@ -42,6 +41,7 @@ public class CompanyProfileController : ControllerBase
         if (cp == null) return NotFound(new { Message = "ไม่พบข้อมูล company_profile (ID 1)" });
         return Ok(cp);
     }
+
 
     [HttpPut]
     [Authorize]
@@ -60,9 +60,6 @@ public class CompanyProfileController : ControllerBase
             cp.Description = dto.Description?.Trim();
             cp.Email = dto.Email?.Trim();
 
-            // ---------------------------------------------------------
-            // ✅ แก้ไขส่วน Phone: ตัดขีด/สัญลักษณ์ออก เอาแค่เลข 10 หลัก
-            // ---------------------------------------------------------
             if (!string.IsNullOrEmpty(dto.Phone))
             {
                 // 1. กรองเอาเฉพาะตัวเลข (0-9) ตัด - หรือ space หรือ () ออกหมด

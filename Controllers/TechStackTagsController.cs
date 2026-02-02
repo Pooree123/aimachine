@@ -111,43 +111,36 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "แก้ไขข้อมูลสำเร็จ" });
         }
 
-        // ✅ ปรับปรุง Delete Logic ให้ตรงกับ Context
         [HttpDelete("{id:int}")]
         [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
-            var entity = await _context.TechStackTags.FindAsync(id);
-            if (entity == null) return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
-
-            // 1. เช็คว่าถูกใช้ใน Jobs (ประกาศงาน) หรือไม่?
-            // ✅ ใช้ JobsTags และ StackTagId (ตาม AimachineContext)
-            bool isUsedInJobs = await _context.JobsTags.AnyAsync(jt => jt.StackTagId == id);
-            if (isUsedInJobs)
+            try
             {
-                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกใช้งานอยู่ในประกาศรับสมัครงาน (Jobs)" });
-            }
+                var entity = await _context.TechStackTags.FindAsync(id);
+                if (entity == null)
+                    return NotFound(new { Message = "ไม่พบข้อมูล Tech Stack" });
 
-            // 2. เช็คว่าถูกใช้ใน Interns (ฝึกงาน) หรือไม่?
-            // ✅ ใช้ InternTags และ StackTagId (ตาม AimachineContext)
-            bool isUsedInInterns = await _context.InternTags.AnyAsync(it => it.StackTagId == id);
-            if (isUsedInInterns)
+                _context.TechStackTags.Remove(entity);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
+            }
+            catch (DbUpdateException ex)
             {
-                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกใช้งานอยู่ในประกาศรับนักศึกษาฝึกงาน (Interns)" });
+                return Conflict(new
+                {
+                    Message = "ไม่สามารถลบ Tech Stack นี้ได้ เนื่องจากถูกใช้งานอยู่ในระบบ (เช่น Jobs, Interns หรือ Tech Stack หลัก)",
+                });
             }
-
-            // 3. (แถม) เช็คว่าถูกใช้ใน TechStackTag1 (ตารางจับคู่ Expertise) หรือไม่
-            // ถ้าตาราง tech_stack_tags เป็นตารางกลางที่เชื่อม Tag เข้ากับ TechStack หลัก
-            bool isUsedInTechs = await _context.TechStackTags1.AnyAsync(tt => tt.StackTagId == id);
-            if (isUsedInTechs)
+            catch (Exception ex)
             {
-                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจาก Tech Stack นี้ถูกผูกอยู่กับข้อมูล Tech Stack หลัก" });
+                return StatusCode(500, new
+                {
+                    Message = "เกิดข้อผิดพลาดภายในระบบ",
+                    Error = ex.Message
+                });
             }
-
-            // ถ้าไม่ติดเงื่อนไขข้างบน -> ลบได้
-            _context.TechStackTags.Remove(entity);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
         }
 
         [HttpGet("by-department/{departmentId:int}")]

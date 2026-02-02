@@ -112,28 +112,16 @@ namespace Aimachine.Controllers
             if (entity == null)
                 return NotFound(new { Message = "ไม่พบ Department Type" });
 
-            // ✅ Check 1: ห้ามลบข้อมูลระบบ (System Default)
             if (entity.CanDelete.HasValue && !entity.CanDelete.Value)
             {
-                return BadRequest(new { Message = "ไม่สามารถลบข้อมูลนี้ได้ (System Default)" });
+                return Conflict(new { Message = "ไม่สามารถลบข้อมูลนี้ได้ (System Default)" });
             }
 
-            // ✅ Check 2: ห้ามลบถ้าถูกใช้ใน JobTitle
-            if (await _context.JobTitles.AnyAsync(j => j.DepartmentId == id))
+            if (await _context.JobTitles.AnyAsync(j => j.DepartmentId == id) ||
+                await _context.Partners.AnyAsync(p => p.DepartmentId == id) ||
+                await _context.Solutions.AnyAsync(s => s.DepartmentId == id))
             {
-                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจากถูกใช้งานใน Job Title" });
-            }
-
-            // ✅ Check 3: ห้ามลบถ้าถูกใช้ใน Partners (เพิ่มส่วนนี้เข้าไปด้วยครับ)
-            if (await _context.Partners.AnyAsync(p => p.DepartmentId == id))
-            {
-                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจากถูกใช้งานใน Partners" });
-            }
-
-            // ✅ Check 4: ห้ามลบถ้าถูกใช้ใน Solutions
-            if (await _context.Solutions.AnyAsync(s => s.DepartmentId == id))
-            {
-                return BadRequest(new { Message = "ไม่สามารถลบได้ เนื่องจากถูกใช้งานใน Solutions" });
+                return Conflict(new { Message = "ไม่สามารถลบได้ เนื่องจากข้อมูลนี้ถูกใช้งานอยู่ในส่วนอื่น (JobTitle, Partner, หรือ Solution)" });
             }
 
             _context.DepartmentTypes.Remove(entity);
