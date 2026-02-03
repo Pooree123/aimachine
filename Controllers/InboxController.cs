@@ -124,9 +124,20 @@ namespace Aimachine.Controllers
 
                 return Ok(new { Message = "เพิ่มข้อมูลสำเร็จ", Id = entity.Id });
             }
+            catch (DbUpdateException dbEx)
+            {
+                // ดึง Error จริงๆ ที่ซ่อนอยู่ข้างในออกมา
+                var realError = dbEx.InnerException?.Message ?? dbEx.Message;
+
+                return BadRequest(new
+                {
+                    Message = "บันทึกข้อมูลไม่สำเร็จ (Database Error)",
+                    Error = realError // ตรงนี้จะบอกชัดเลยว่า column ไหนมีปัญหา
+                });
+            }
             catch (Exception ex)
             {
-                return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
+                return BadRequest(new { Message = "เกิดข้อผิดพลาดทั่วไป", Error = ex.Message });
             }
         }
 

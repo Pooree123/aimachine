@@ -41,10 +41,6 @@ public partial class AdminUser
 
     public virtual ICollection<Event> EventUpdateByNavigations { get; set; } = new List<Event>();
 
-    public virtual ICollection<Inbox> InboxCreatedByNavigations { get; set; } = new List<Inbox>();
-
-    public virtual ICollection<Inbox> InboxUpdateByNavigations { get; set; } = new List<Inbox>();
-
     public virtual ICollection<Intern> InternCreatedByNavigations { get; set; } = new List<Intern>();
 
     public virtual ICollection<Intern> InternUpdateByNavigations { get; set; } = new List<Intern>();
