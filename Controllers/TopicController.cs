@@ -85,7 +85,7 @@ namespace Aimachine.Controllers
             int currentUserId = User.GetUserId();
 
             if (!ModelState.IsValid)
-                return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
+                return StatusCode(500, new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
             try
             {
@@ -94,7 +94,7 @@ namespace Aimachine.Controllers
                 // เช็คชื่อซ้ำ
                 var exists = await _context.Topics.AnyAsync(t => t.TopicTitle == title);
                 if (exists)
-                    return BadRequest(new { Message = "มี Topic ชื่อนี้อยู่แล้ว" });
+                    return StatusCode(500, new { Message = "มี Topic ชื่อนี้อยู่แล้ว" });
 
                 var entity = new Topic
                 {
@@ -112,7 +112,7 @@ namespace Aimachine.Controllers
             }
             catch (Exception ex)
             {
-                return BadRequest(new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
+                return StatusCode(500, new { Message = "เพิ่มข้อมูลไม่สำเร็จ", Error = ex.Message });
             }
         }
 
@@ -124,7 +124,7 @@ namespace Aimachine.Controllers
             int currentUserId = User.GetUserId();
 
             if (!ModelState.IsValid)
-                return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
+                return StatusCode(500, new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
             try
             {
@@ -137,7 +137,7 @@ namespace Aimachine.Controllers
                 // เช็คชื่อซ้ำ (ไม่นับตัวเอง)
                 var duplicate = await _context.Topics.AnyAsync(t => t.Id != id && t.TopicTitle == title);
                 if (duplicate)
-                    return BadRequest(new { Message = "ชื่อ Topic ซ้ำกับรายการอื่น" });
+                    return StatusCode(500, new { Message = "ชื่อ Topic ซ้ำกับรายการอื่น" });
 
                 entity.TopicTitle = title;
                 entity.UpdateBy = currentUserId; // อัปเดตคนแก้ไขล่าสุด

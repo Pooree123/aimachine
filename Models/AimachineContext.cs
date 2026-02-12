@@ -274,7 +274,6 @@ public partial class AimachineContext : DbContext
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").HasColumnType("timestamp without time zone");
             entity.Property(e => e.CreatedBy).HasColumnName("created_by");
             entity.Property(e => e.DepartmentId).HasColumnName("department_id");
-            entity.Property(e => e.Description).HasMaxLength(255).HasColumnName("description");
             entity.Property(e => e.Name).HasMaxLength(100).HasColumnName("name");
             entity.Property(e => e.Status).HasMaxLength(255).HasColumnName("status");
             entity.Property(e => e.UpdateAt).HasColumnName("update_at").HasColumnType("timestamp without time zone");

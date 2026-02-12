@@ -11,12 +11,13 @@ namespace Aimachine.DTOs
         [Required]
         public string Name { get; set; } = string.Empty;
 
-        public string? Description { get; set; }
+        // ❌ ลบ Description ออกแล้ว
 
         public string Status { get; set; } = "Active";
 
         public List<IFormFile>? ImageFiles { get; set; }
     }
+
     public class UpdateSolutionDto
     {
         [Required]
@@ -25,7 +26,7 @@ namespace Aimachine.DTOs
         [Required]
         public string Name { get; set; } = string.Empty;
 
-        public string? Description { get; set; }
+        // ❌ ลบ Description ออกแล้ว
 
         public string Status { get; set; } = "Active";
 
@@ -36,8 +37,6 @@ namespace Aimachine.DTOs
     {
         public string? Q { get; set; }
         public int? DepartmentId { get; set; }
-
-        // ✅ เพิ่มตัวนี้เข้าไปครับ
         public string? DepartmentTitle { get; set; }
     }
 }

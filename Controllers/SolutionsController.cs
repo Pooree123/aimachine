@@ -25,7 +25,7 @@ namespace Aimachine.Controllers
         {
             if (file == null || file.Length == 0) return false;
 
-            // 1. เช็คขนาดไฟล์ (5 MB = 5 * 1024 * 1024 bytes)
+            // 1. เช็คขนาดไฟล์ (5 MB)
             if (file.Length > 5 * 1024 * 1024) return false;
 
             // 2. เช็คนามสกุลและ MIME type
@@ -45,11 +45,30 @@ namespace Aimachine.Controllers
 
             var data = await _context.DepartmentTypes
                 .AsNoTracking()
+                // กรองเอาเฉพาะแผนกที่มี Solution Active
                 .Where(d => d.Solutions.Any(s => s.Status == "Active"))
                 .Select(d => new
                 {
                     DepartmentId = d.Id,
                     DepartmentTitle = d.DepartmentTitle,
+
+                    TechStackGroups = d.TechStackTags
+                        .Select(tag => new
+                        {
+                            TagId = tag.Id,
+                            TagTitle = tag.TechStackTitle,
+                            Techs = tag.TechStackTag1s
+                                .Where(bridge => bridge.Tech != null)
+                                .Select(bridge => new
+                                {
+                                    TechId = bridge.Tech!.Id,
+                                    TechHeader = bridge.Tech.Header,
+                                    TechDescription = bridge.Tech.Description
+                                })
+                                .ToList()
+                        })
+                        .ToList(),
+
                     Solutions = d.Solutions
                         .Where(s => s.Status == "Active")
                         .OrderByDescending(s => s.Id)
@@ -58,7 +77,6 @@ namespace Aimachine.Controllers
                             s.Id,
                             s.DepartmentId,
                             s.Name,
-                            s.Description,
                             s.Status,
                             DepartmentTitle = d.DepartmentTitle,
                             Images = s.SolutionImgs
@@ -95,7 +113,6 @@ namespace Aimachine.Controllers
                     s.Id,
                     s.DepartmentId,
                     s.Name,
-                    s.Description,
                     s.Status,
                     DepartmentTitle = s.Department != null ? s.Department.DepartmentTitle : "",
                     Images = s.SolutionImgs
@@ -128,7 +145,6 @@ namespace Aimachine.Controllers
                 {
                     s.Id,
                     s.Name,
-                    s.Description,
                     s.Status,
                     s.DepartmentId,
                     DepartmentName = s.Department != null ? s.Department.DepartmentTitle : "",
@@ -156,7 +172,6 @@ namespace Aimachine.Controllers
             if (!await _context.DepartmentTypes.AnyAsync(d => d.Id == dto.DepartmentId))
                 return BadRequest(new { Message = "ไม่พบ Department ID นี้ในระบบ" });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ
             if (dto.ImageFiles != null && dto.ImageFiles.Count > 0)
             {
                 foreach (var img in dto.ImageFiles)
@@ -179,7 +194,7 @@ namespace Aimachine.Controllers
                     {
                         DepartmentId = dto.DepartmentId,
                         Name = dto.Name,
-                        Description = dto.Description,
+                        // Description = dto.Description, <-- ลบออก
                         Status = dto.Status,
                         CreatedBy = currentUserId,
                         UpdateBy = currentUserId,
@@ -239,7 +254,6 @@ namespace Aimachine.Controllers
             int currentUserId = User.GetUserId();
             var strategy = _context.Database.CreateExecutionStrategy();
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่
             if (dto.NewImageFiles != null && dto.NewImageFiles.Count > 0)
             {
                 foreach (var img in dto.NewImageFiles)
@@ -270,7 +284,7 @@ namespace Aimachine.Controllers
 
                     entity.DepartmentId = dto.DepartmentId;
                     entity.Name = dto.Name;
-                    entity.Description = dto.Description;
+                    // entity.Description = dto.Description; <-- ลบออก
                     entity.Status = dto.Status;
                     entity.UpdateBy = currentUserId;
                     entity.UpdateAt = DateTime.UtcNow.AddHours(7);
@@ -412,8 +426,7 @@ namespace Aimachine.Controllers
                 {
                     var kw = req.Q.Trim();
                     query = query.Where(s =>
-                        EF.Functions.Collate((s.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw) ||
-                        EF.Functions.Collate((s.Description ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
+                        EF.Functions.Collate((s.Name ?? ""), "SQL_Latin1_General_CP1_CI_AS").Contains(kw)
                     );
                 }
 
@@ -425,7 +438,6 @@ namespace Aimachine.Controllers
                         s.DepartmentId,
                         DepartmentTitle = s.Department != null ? s.Department.DepartmentTitle : "",
                         s.Name,
-                        s.Description,
                         s.Status,
                         s.CreatedAt,
                         CoverUrl = s.SolutionImgs

@@ -82,6 +82,31 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = data });
         }
 
+        [HttpGet("admin")]
+        [Authorize]
+        public async Task<IActionResult> GetAlladmin()
+        {
+            var baseUrl = BaseUrl();
+            var data = await _context.Events
+                .AsNoTracking()
+                .OrderByDescending(e => e.Id)
+                .Select(e => new
+                {
+                    e.Id,
+                    e.CategoryId,
+                    CategoryTitle = _context.EventCategories.Where(c => c.Id == e.CategoryId).Select(c => c.EventTitle).FirstOrDefault(),
+                    e.Events,
+                    e.Location,
+                    e.EventDate,
+                    e.Description,
+                    e.Status,
+                    CoverUrl = _context.EventsImgs.Where(x => x.EventsId == e.Id && x.IsCover == true).Select(x => $"{baseUrl}/uploads/events/{x.Image}").FirstOrDefault(),
+                    ImagesCount = _context.EventsImgs.Count(x => x.EventsId == e.Id)
+                })
+                .ToListAsync();
+            return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = data });
+        }
+
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {

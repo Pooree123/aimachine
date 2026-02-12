@@ -11,8 +11,6 @@ public partial class Solution
 
     public string? Name { get; set; }
 
-    public string? Description { get; set; }
-
     public string Status { get; set; } = null!;
 
     public int? CreatedBy { get; set; }
