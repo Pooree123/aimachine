@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Aimachine.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using Aimachine.Services; // ✅ เพิ่ม
 
 namespace Aimachine.Controllers
 {
@@ -14,16 +15,18 @@ namespace Aimachine.Controllers
         private readonly AimachineContext _context;
         private readonly IWebHostEnvironment _env;
 
-        public EventsController(AimachineContext context, IWebHostEnvironment env)
+        private readonly CloudinaryService _cloud; // ✅ เพิ่ม
+
+        public EventsController(AimachineContext context, IWebHostEnvironment env, CloudinaryService cloud) // ✅ เพิ่ม cloud
         {
             _context = context;
             _env = env;
+            _cloud = cloud; // ✅ เพิ่ม
         }
 
         private string BaseUrl() => $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
         private string EventsUploadFolder() => Path.Combine(_env.WebRootPath, "uploads", "events");
 
-        // ✅ ฟังก์ชันช่วยเช็คไฟล์: อนุญาตแค่ JPG, JPEG, PNG
         private bool IsAllowedImageFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return false;
@@ -37,30 +40,24 @@ namespace Aimachine.Controllers
             return allowedExtensions.Contains(ext) && allowedMimeTypes.Contains(mime);
         }
 
+        // ✅ เปลี่ยนจาก save local -> upload Cloudinary แล้วคืน URL
         private async Task<string> SaveImageAsync(IFormFile file)
         {
-            Directory.CreateDirectory(EventsUploadFolder());
-            var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-            var path = Path.Combine(EventsUploadFolder(), fileName);
-
-            using var stream = new FileStream(path, FileMode.Create);
-            await file.CopyToAsync(stream);
-
-            return fileName;
+            // folder บน cloud
+            return await _cloud.UploadImageAsync(file, "aimachine/events");
         }
 
-        private void DeleteImageIfExists(string? fileName)
+        // ✅ ตอนนี้ไม่ลบไฟล์ local แล้ว (ยังไม่ทำลบ cloud จริง)
+        private void DeleteImageIfExists(string? fileNameOrUrl)
         {
-            if (string.IsNullOrWhiteSpace(fileName)) return;
-            var path = Path.Combine(EventsUploadFolder(), fileName);
-            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            // intentionally do nothing
         }
 
-        // ... (GetAll, GetById เหมือนเดิม ไม่ต้องแก้) ...
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
             var baseUrl = BaseUrl();
+
             var data = await _context.Events
                 .AsNoTracking()
                 .Where(e => e.Status == "Active")
@@ -69,16 +66,27 @@ namespace Aimachine.Controllers
                 {
                     e.Id,
                     e.CategoryId,
-                    CategoryTitle = _context.EventCategories.Where(c => c.Id == e.CategoryId).Select(c => c.EventTitle).FirstOrDefault(),
+                    CategoryTitle = _context.EventCategories
+                        .Where(c => c.Id == e.CategoryId)
+                        .Select(c => c.EventTitle)
+                        .FirstOrDefault(),
+
                     e.Events,
                     e.Location,
                     e.EventDate,
                     e.Description,
                     e.Status,
-                    CoverUrl = _context.EventsImgs.Where(x => x.EventsId == e.Id && x.IsCover == true).Select(x => $"{baseUrl}/uploads/events/{x.Image}").FirstOrDefault(),
+
+                    // ✅ DB เก็บเป็น URL แล้ว ไม่ต้องต่อ baseUrl
+                    CoverUrl = _context.EventsImgs
+                        .Where(x => x.EventsId == e.Id && x.IsCover == true)
+                        .Select(x => x.Image)
+                        .FirstOrDefault(),
+
                     ImagesCount = _context.EventsImgs.Count(x => x.EventsId == e.Id)
                 })
                 .ToListAsync();
+
             return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = data });
         }
 
@@ -87,6 +95,7 @@ namespace Aimachine.Controllers
         public async Task<IActionResult> GetAlladmin()
         {
             var baseUrl = BaseUrl();
+
             var data = await _context.Events
                 .AsNoTracking()
                 .OrderByDescending(e => e.Id)
@@ -94,16 +103,27 @@ namespace Aimachine.Controllers
                 {
                     e.Id,
                     e.CategoryId,
-                    CategoryTitle = _context.EventCategories.Where(c => c.Id == e.CategoryId).Select(c => c.EventTitle).FirstOrDefault(),
+                    CategoryTitle = _context.EventCategories
+                        .Where(c => c.Id == e.CategoryId)
+                        .Select(c => c.EventTitle)
+                        .FirstOrDefault(),
+
                     e.Events,
                     e.Location,
                     e.EventDate,
                     e.Description,
                     e.Status,
-                    CoverUrl = _context.EventsImgs.Where(x => x.EventsId == e.Id && x.IsCover == true).Select(x => $"{baseUrl}/uploads/events/{x.Image}").FirstOrDefault(),
+
+                    // ✅ DB เก็บเป็น URL แล้ว
+                    CoverUrl = _context.EventsImgs
+                        .Where(x => x.EventsId == e.Id && x.IsCover == true)
+                        .Select(x => x.Image)
+                        .FirstOrDefault(),
+
                     ImagesCount = _context.EventsImgs.Count(x => x.EventsId == e.Id)
                 })
                 .ToListAsync();
+
             return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = data });
         }
 
@@ -111,6 +131,7 @@ namespace Aimachine.Controllers
         public async Task<IActionResult> GetById(int id)
         {
             var baseUrl = BaseUrl();
+
             var ev = await _context.Events
                 .AsNoTracking()
                 .Where(e => e.Id == id)
@@ -132,7 +153,8 @@ namespace Aimachine.Controllers
                             x.Id,
                             x.IsCover,
                             x.OrderId,
-                            ImageUrl = $"{baseUrl}/uploads/events/{x.Image}",
+                            // ✅ เป็น URL แล้ว
+                            ImageUrl = x.Image,
                             FileName = x.Image
                         }).ToList()
                 })
@@ -142,7 +164,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "ดึงข้อมูลสำเร็จ", Data = ev });
         }
 
-        // ✅ แก้ไข: เพิ่ม validation เช็คไฟล์รูปใน Create
         [HttpPost]
         [Authorize]
         [Consumes("multipart/form-data")]
@@ -155,15 +176,12 @@ namespace Aimachine.Controllers
             if (!string.IsNullOrWhiteSpace(body.Status) && body.Status != "Active" && body.Status != "inActive")
                 return StatusCode(500, new { Message = "Status ต้องเป็น Active หรือ inActive" });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ (ถ้ามีการส่งมา)
             if (body.Images != null && body.Images.Count > 0)
             {
                 foreach (var img in body.Images)
                 {
                     if (!IsAllowedImageFile(img))
-                    {
                         return StatusCode(500, new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
-                    }
                 }
             }
 
@@ -191,18 +209,23 @@ namespace Aimachine.Controllers
                 {
                     int order = 1;
                     bool coverSet = false;
+
                     foreach (var file in body.Images.Where(f => f != null && f.Length > 0))
                     {
-                        var fileName = await SaveImageAsync(file);
+                        // ✅ เปลี่ยนจาก fileName -> URL
+                        var imageUrl = await SaveImageAsync(file);
+
                         _context.EventsImgs.Add(new EventsImg
                         {
                             EventsId = entity.Id,
-                            Image = fileName,
+                            Image = imageUrl,  // ✅ เก็บ URL
                             IsCover = !coverSet,
                             OrderId = order++
                         });
+
                         coverSet = true;
                     }
+
                     await _context.SaveChangesAsync();
                 }
 
@@ -214,7 +237,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ... (UpdateInfo เหมือนเดิม ไม่ต้องแก้ เพราะไม่ได้ยุ่งกับรูป) ...
         [HttpPut("{id:int}")]
         [Authorize]
         public async Task<IActionResult> UpdateInfo(int id, [FromBody] UpdateEventDto body)
@@ -247,7 +269,6 @@ namespace Aimachine.Controllers
             }
         }
 
-        // ✅ แก้ไข: เพิ่ม validation เช็คไฟล์รูปใน AddImages
         [HttpPost("{id:int}/images")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> AddImages(int id, [FromForm] List<IFormFile> images)
@@ -258,29 +279,33 @@ namespace Aimachine.Controllers
             if (images == null || images.Count == 0)
                 return StatusCode(500, new { Message = "ไม่มีไฟล์" });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ
             foreach (var img in images)
             {
                 if (!IsAllowedImageFile(img))
-                {
                     return StatusCode(500, new { Message = $"ไฟล์ '{img.FileName}' ไม่ถูกต้อง อนุญาตเฉพาะ .jpg, .jpeg, .png เท่านั้น" });
-                }
             }
 
-            var maxOrder = await _context.EventsImgs.Where(x => x.EventsId == id).Select(x => (int?)x.OrderId).MaxAsync() ?? 0;
+            var maxOrder = await _context.EventsImgs
+                .Where(x => x.EventsId == id)
+                .Select(x => (int?)x.OrderId)
+                .MaxAsync() ?? 0;
+
             bool hasCover = await _context.EventsImgs.AnyAsync(x => x.EventsId == id && x.IsCover == true);
             int order = maxOrder + 1;
 
             foreach (var file in images.Where(f => f != null && f.Length > 0))
             {
-                var fileName = await SaveImageAsync(file);
+                // ✅ เปลี่ยนจาก fileName -> URL
+                var imageUrl = await SaveImageAsync(file);
+
                 _context.EventsImgs.Add(new EventsImg
                 {
                     EventsId = id,
-                    Image = fileName,
+                    Image = imageUrl,   // ✅ เก็บ URL
                     IsCover = !hasCover,
                     OrderId = order++
                 });
+
                 hasCover = true;
             }
 
@@ -288,7 +313,6 @@ namespace Aimachine.Controllers
             return Ok(new { Message = "เพิ่มรูปสำเร็จ" });
         }
 
-        // ... (DeleteImage, Delete เหมือนเดิม ไม่ต้องแก้) ...
         [HttpDelete("images/{imgId:int}")]
         [Authorize]
         public async Task<IActionResult> DeleteImage(int imgId)
@@ -298,18 +322,26 @@ namespace Aimachine.Controllers
 
             _context.EventsImgs.Remove(img);
             await _context.SaveChangesAsync();
+
+            // ✅ ตอนนี้ไม่ได้ลบ cloud (ต้องมี public_id ค่อยทำ)
             DeleteImageIfExists(img.Image);
 
             bool hasCover = await _context.EventsImgs.AnyAsync(x => x.EventsId == img.EventsId && x.IsCover == true);
             if (!hasCover)
             {
-                var first = await _context.EventsImgs.Where(x => x.EventsId == img.EventsId).OrderBy(x => x.OrderId).ThenBy(x => x.Id).FirstOrDefaultAsync();
+                var first = await _context.EventsImgs
+                    .Where(x => x.EventsId == img.EventsId)
+                    .OrderBy(x => x.OrderId)
+                    .ThenBy(x => x.Id)
+                    .FirstOrDefaultAsync();
+
                 if (first != null)
                 {
                     first.IsCover = true;
                     await _context.SaveChangesAsync();
                 }
             }
+
             return Ok(new { Message = "ลบรูปสำเร็จ" });
         }
 
@@ -325,11 +357,12 @@ namespace Aimachine.Controllers
 
             await _context.SaveChangesAsync();
 
+            // ✅ ตอนนี้ไม่ได้ลบ cloud
             foreach (var img in imgs) DeleteImageIfExists(img.Image);
+
             return Ok(new { Message = "ลบ Event สำเร็จ" });
         }
 
-        // ... (Search เหมือนเดิม ไม่ต้องแก้) ...
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] EventSearchQueryDto req)
         {
@@ -360,13 +393,23 @@ namespace Aimachine.Controllers
                 {
                     e.Id,
                     e.CategoryId,
-                    CategoryTitle = _context.EventCategories.Where(c => c.Id == e.CategoryId).Select(c => c.EventTitle).FirstOrDefault(),
+                    CategoryTitle = _context.EventCategories
+                        .Where(c => c.Id == e.CategoryId)
+                        .Select(c => c.EventTitle)
+                        .FirstOrDefault(),
+
                     e.Events,
                     e.Location,
                     e.EventDate,
                     e.Description,
                     e.Status,
-                    CoverUrl = _context.EventsImgs.Where(x => x.EventsId == e.Id && x.IsCover == true).Select(x => $"{baseUrl}/uploads/events/{x.Image}").FirstOrDefault(),
+
+                    // ✅ เป็น URL แล้ว
+                    CoverUrl = _context.EventsImgs
+                        .Where(x => x.EventsId == e.Id && x.IsCover == true)
+                        .Select(x => x.Image)
+                        .FirstOrDefault(),
+
                     ImagesCount = _context.EventsImgs.Count(x => x.EventsId == e.Id)
                 })
                 .ToListAsync();

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using Aimachine.Services; // ✅ เพิ่ม
 
 namespace Aimachine.Controllers
 {
@@ -12,12 +13,14 @@ namespace Aimachine.Controllers
     public class PartnersController : ControllerBase
     {
         private readonly AimachineContext _context;
-        private readonly IWebHostEnvironment _environment;
+        private readonly IWebHostEnvironment _environment; // คงไว้ (ไม่จำเป็นแล้ว แต่ไม่ลบตามที่ขอ)
+        private readonly CloudinaryService _cloud; // ✅ เพิ่ม
 
-        public PartnersController(AimachineContext context, IWebHostEnvironment environment)
+        public PartnersController(AimachineContext context, IWebHostEnvironment environment, CloudinaryService cloud) // ✅ เพิ่ม cloud
         {
             _context = context;
             _environment = environment;
+            _cloud = cloud;
         }
 
         // ✅ Helper Function: เช็คไฟล์รูป + ขนาดไฟล์
@@ -25,10 +28,8 @@ namespace Aimachine.Controllers
         {
             if (file == null || file.Length == 0) return false;
 
-            // 1. เช็คขนาดไฟล์ (5 MB)
             if (file.Length > 5 * 1024 * 1024) return false;
 
-            // 2. เช็คนามสกุลและ MIME type
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
             var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
 
@@ -38,11 +39,13 @@ namespace Aimachine.Controllers
             return allowedExtensions.Contains(ext) && allowedMimeTypes.Contains(mime);
         }
 
+        // ✅ upload -> return URL
+        private Task<string> SaveImageAsync(IFormFile file)
+            => _cloud.UploadImageAsync(file, "aimachine/partners");
+
         [HttpGet]
         public async Task<IActionResult> GetPublicPartners()
         {
-            var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-
             var data = await _context.DepartmentTypes
                 .AsNoTracking()
                 .Where(d => d.Partners.Any(p => p.Status == "Active"))
@@ -58,7 +61,10 @@ namespace Aimachine.Controllers
                             p.Id,
                             p.Name,
                             p.Status,
-                            ImageUrl = string.IsNullOrEmpty(p.Image) ? null : $"{baseUrl}/uploads/partners/{p.Image}",
+
+                            // ✅ DB เก็บเป็น URL แล้ว
+                            ImageUrl = string.IsNullOrEmpty(p.Image) ? null : p.Image,
+
                             p.CreatedAt
                         })
                         .ToList()
@@ -74,8 +80,6 @@ namespace Aimachine.Controllers
         {
             try
             {
-                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-
                 var data = await _context.Partners
                   .AsNoTracking()
                   .Include(x => x.Department)
@@ -88,7 +92,10 @@ namespace Aimachine.Controllers
                       x.Id,
                       x.DepartmentId,
                       DepartmentTitle = x.Department != null ? x.Department.DepartmentTitle : "",
-                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
+
+                      // ✅ URL ตรงๆ
+                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : x.Image,
+
                       x.Name,
                       x.Status,
                       x.CreatedBy,
@@ -113,8 +120,6 @@ namespace Aimachine.Controllers
         {
             try
             {
-                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-
                 var data = await _context.Partners
                   .AsNoTracking()
                   .Include(x => x.Department)
@@ -125,7 +130,10 @@ namespace Aimachine.Controllers
                       x.Id,
                       x.DepartmentId,
                       DepartmentTitle = x.Department != null ? x.Department.DepartmentTitle : "",
-                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
+
+                      // ✅ URL ตรงๆ
+                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : x.Image,
+
                       x.Name,
                       x.Status,
                       x.CreatedBy,
@@ -154,11 +162,8 @@ namespace Aimachine.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ (ขนาด + ประเภท)
             if (request.ImageFile != null && !IsAllowedImageFile(request.ImageFile))
-            {
                 return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
-            }
 
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -190,20 +195,11 @@ namespace Aimachine.Controllers
                     _context.Partners.Add(entity);
                     await _context.SaveChangesAsync();
 
-                    if (request.ImageFile != null)
+                    // ✅ Upload Cloudinary แล้วเก็บ URL ลง DB
+                    if (request.ImageFile != null && request.ImageFile.Length > 0)
                     {
-                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
-                        string newFileName = $"{Guid.NewGuid()}{Path.GetExtension(request.ImageFile.FileName)}";
-                        string filePath = Path.Combine(uploadsFolder, newFileName);
-
-                        using (var fileStream = new FileStream(filePath, FileMode.Create))
-                        {
-                            await request.ImageFile.CopyToAsync(fileStream);
-                        }
-
-                        entity.Image = newFileName;
+                        var imageUrl = await SaveImageAsync(request.ImageFile);
+                        entity.Image = imageUrl; // ✅ เก็บ URL
                         await _context.SaveChangesAsync();
                     }
 
@@ -224,11 +220,8 @@ namespace Aimachine.Controllers
         {
             int currentUserId = User.GetUserId();
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่ (ขนาด + ประเภท)
             if (request.ImageFile != null && !IsAllowedImageFile(request.ImageFile))
-            {
                 return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
-            }
 
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -255,26 +248,11 @@ namespace Aimachine.Controllers
                     entity.UpdateBy = currentUserId;
                     entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
-                    if (request.ImageFile != null)
+                    // ✅ Upload Cloudinary แล้วแทน URL เดิมใน DB (ไม่ลบของเก่าบน cloud)
+                    if (request.ImageFile != null && request.ImageFile.Length > 0)
                     {
-                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
-                        if (!string.IsNullOrEmpty(entity.Image))
-                        {
-                            string oldFilePath = Path.Combine(uploadsFolder, entity.Image);
-                            if (System.IO.File.Exists(oldFilePath)) System.IO.File.Delete(oldFilePath);
-                        }
-
-                        string newFileName = $"{Guid.NewGuid()}{Path.GetExtension(request.ImageFile.FileName)}";
-                        string filePath = Path.Combine(uploadsFolder, newFileName);
-
-                        using (var fileStream = new FileStream(filePath, FileMode.Create))
-                        {
-                            await request.ImageFile.CopyToAsync(fileStream);
-                        }
-
-                        entity.Image = newFileName;
+                        var imageUrl = await SaveImageAsync(request.ImageFile);
+                        entity.Image = imageUrl; // ✅ เก็บ URL
                     }
 
                     await _context.SaveChangesAsync();
@@ -299,21 +277,9 @@ namespace Aimachine.Controllers
                 var entity = await _context.Partners.FindAsync(id);
                 if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
-                string imageToDelete = entity.Image;
-
+                // ✅ ตอนนี้ Image เป็น URL (cloud) — ลบแค่ DB ก่อน
                 _context.Partners.Remove(entity);
                 await _context.SaveChangesAsync();
-
-                if (!string.IsNullOrEmpty(imageToDelete))
-                {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                    string filePath = Path.Combine(uploadsFolder, imageToDelete);
-
-                    if (System.IO.File.Exists(filePath))
-                    {
-                        System.IO.File.Delete(filePath);
-                    }
-                }
 
                 return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
             }
@@ -336,24 +302,18 @@ namespace Aimachine.Controllers
         {
             try
             {
-                var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
-
                 var query = _context.Partners
                     .AsNoTracking()
                     .Include(p => p.Department)
                     .AsQueryable();
 
                 if (req.DepartmentId.HasValue)
-                {
                     query = query.Where(p => p.DepartmentId == req.DepartmentId.Value);
-                }
 
                 if (!string.IsNullOrWhiteSpace(req.Q))
                 {
                     var kw = req.Q.Trim();
-                    query = query.Where(p =>
-                        p.Name != null && p.Name.Contains(kw)
-                    );
+                    query = query.Where(p => p.Name != null && p.Name.Contains(kw));
                 }
 
                 var data = await query
@@ -363,9 +323,10 @@ namespace Aimachine.Controllers
                         p.Id,
                         p.DepartmentId,
                         DepartmentTitle = p.Department != null ? p.Department.DepartmentTitle : "",
-                        ImageUrl = string.IsNullOrEmpty(p.Image)
-                            ? null
-                            : $"{baseUrl}/uploads/partners/{p.Image}",
+
+                        // ✅ URL ตรงๆ
+                        ImageUrl = string.IsNullOrEmpty(p.Image) ? null : p.Image,
+
                         p.Name,
                         p.Status,
                         p.CreatedAt,

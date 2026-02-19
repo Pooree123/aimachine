@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using Aimachine.Services;
+
 
 // ✅ 1. เพิ่มบรรทัดนี้: แก้ปัญหา DateTime ของ PostgreSQL (สำคัญมาก ไม่งั้นจะ Error เวลา save วันที่)
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -42,6 +44,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Controllers
 builder.Services.AddControllers();
+
+builder.Services.AddScoped<CloudinaryService>();
 
 // ✅ 4. ตั้งค่า Swagger ให้มีปุ่ม Login
 builder.Services.AddEndpointsApiExplorer();

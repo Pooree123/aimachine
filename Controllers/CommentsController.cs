@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using Aimachine.Services; // ✅ เพิ่ม
 
 namespace Aimachine.Controllers;
 
@@ -13,11 +14,16 @@ public class CommentsController : ControllerBase
 {
     private readonly AimachineContext _context;
     private readonly IWebHostEnvironment _environment;
+    private readonly CloudinaryService _cloud; // ✅ เพิ่ม
 
-    public CommentsController(AimachineContext context, IWebHostEnvironment environment)
+    public CommentsController(
+        AimachineContext context,
+        IWebHostEnvironment environment,
+        CloudinaryService cloud) // ✅ เพิ่ม
     {
         _context = context;
         _environment = environment;
+        _cloud = cloud;
     }
 
     // ✅ Helper Function: เช็คไฟล์รูป
@@ -38,7 +44,7 @@ public class CommentsController : ControllerBase
         var baseUrl = $"{Request.Scheme}://{Request.Host}{Request.PathBase}";
 
         return Ok(await _context.Comments.AsNoTracking()
-          .Where(c => c.Status == "Active") // 👈 กรองเฉพาะ Active
+          .Where(c => c.Status == "Active")
           .OrderByDescending(c => c.Id)
           .Select(c => new
           {
@@ -105,7 +111,7 @@ public class CommentsController : ControllerBase
           .ToListAsync());
     }
 
-    // ✅ 4. Create
+    // ✅ 4. Create (แก้ให้ upload Cloudinary ถ้ามีไฟล์)
     [HttpPost]
     public async Task<IActionResult> Create([FromForm] CreateCommentDto dto)
     {
@@ -115,28 +121,22 @@ public class CommentsController : ControllerBase
             return BadRequest(new { Message = "ไม่พบตำแหน่งงานนี้" });
 
         if (dto.ImageFile != null && !IsAllowedImageFile(dto.ImageFile))
-            return BadRequest(new { Message = "ไฟล์รูปภาพไม่ถูกต้อง (รองรับ .jpg, .png ขนาดไม่เกิน 5MB)" });
+            return BadRequest(new { Message = "ไฟล์รูปภาพไม่ถูกต้อง (รองรับ .jpg, .png, .webp ขนาดไม่เกิน 5MB)" });
 
         try
         {
+            // ✅ ไม่แก้ default
             string imagePath = "uploads/Default_pfp.jpg";
 
+            // ✅ ถ้ามีไฟล์ -> อัปขึ้น Cloudinary แล้วเก็บ URL
             if (dto.ImageFile != null && dto.ImageFile.Length > 0)
             {
-                string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "comments");
-                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
-                string fileName = $"{Guid.NewGuid()}{Path.GetExtension(dto.ImageFile.FileName)}";
-                string fullPath = Path.Combine(uploadsFolder, fileName);
-
-                using (var stream = new FileStream(fullPath, FileMode.Create))
-                {
-                    await dto.ImageFile.CopyToAsync(stream);
-                }
-                imagePath = $"uploads/comments/{fileName}";
+                imagePath = await _cloud.UploadImageAsync(dto.ImageFile, "aimachine/comments");
+                // imagePath จะเป็น URL (http...) -> logic GET ของคุณรองรับอยู่แล้ว
             }
             else if (!string.IsNullOrEmpty(dto.ProfileImg))
             {
+                // ✅ กรณี user ส่ง URL มาเอง
                 imagePath = dto.ProfileImg;
             }
 
@@ -166,20 +166,15 @@ public class CommentsController : ControllerBase
     [Authorize]
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateCommentStatusDto dto)
     {
-        // ตรวจสอบค่า Status ว่าถูกต้องไหม (ถ้าจำเป็น)
         if (dto.Status != "Active" && dto.Status != "inActive")
-        {
             return BadRequest(new { Message = "Status ต้องเป็น 'Active' หรือ 'inActive' เท่านั้น" });
-        }
 
         var entity = await _context.Comments.FindAsync(id);
         if (entity == null) return NotFound(new { Message = "ไม่พบคอมเมนต์" });
 
         try
         {
-            // 📝 อัปเดตแค่ Status อย่างเดียว
             entity.Status = dto.Status;
-
             await _context.SaveChangesAsync();
             return Ok(new { Message = $"อัปเดตสถานะเป็น {dto.Status} สำเร็จ" });
         }
