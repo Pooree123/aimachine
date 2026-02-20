@@ -9,6 +9,8 @@ public partial class Comment
 
     public string? ProfileImg { get; set; }
 
+    public string? PublicId { get; set; }
+
     public int JobTitleId { get; set; }
 
     public string? Name { get; set; }

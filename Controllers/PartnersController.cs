@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using Aimachine.Services; // ✅ เพิ่มเพื่อเรียกใช้ Cloudinary
 
 namespace Aimachine.Controllers
 {
@@ -13,22 +14,21 @@ namespace Aimachine.Controllers
     {
         private readonly AimachineContext _context;
         private readonly IWebHostEnvironment _environment;
+        private readonly IPhotoService _photoService; // ✅ เพิ่ม IPhotoService
 
-        public PartnersController(AimachineContext context, IWebHostEnvironment environment)
+        // ✅ อัปเดต Constructor ให้รับ IPhotoService ด้วย
+        public PartnersController(AimachineContext context, IWebHostEnvironment environment, IPhotoService photoService)
         {
             _context = context;
             _environment = environment;
+            _photoService = photoService;
         }
 
-        // ✅ Helper Function: เช็คไฟล์รูป + ขนาดไฟล์
         private bool IsAllowedImageFile(IFormFile file)
         {
             if (file == null || file.Length == 0) return false;
-
-            // 1. เช็คขนาดไฟล์ (5 MB)
             if (file.Length > 5 * 1024 * 1024) return false;
 
-            // 2. เช็คนามสกุลและ MIME type
             var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
             var allowedMimeTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
 
@@ -58,7 +58,9 @@ namespace Aimachine.Controllers
                             p.Id,
                             p.Name,
                             p.Status,
-                            ImageUrl = string.IsNullOrEmpty(p.Image) ? null : $"{baseUrl}/uploads/partners/{p.Image}",
+                            // ✅ ดัก URL ว่าเป็นของ Local หรือ Cloudinary
+                            ImageUrl = string.IsNullOrEmpty(p.Image) ? null :
+                                       (p.Image.StartsWith("http") ? p.Image : $"{baseUrl}/uploads/partners/{p.Image}"),
                             p.CreatedAt
                         })
                         .ToList()
@@ -88,7 +90,9 @@ namespace Aimachine.Controllers
                       x.Id,
                       x.DepartmentId,
                       DepartmentTitle = x.Department != null ? x.Department.DepartmentTitle : "",
-                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
+                      // ✅ ดัก URL
+                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null :
+                                 (x.Image.StartsWith("http") ? x.Image : $"{baseUrl}/uploads/partners/{x.Image}"),
                       x.Name,
                       x.Status,
                       x.CreatedBy,
@@ -125,7 +129,9 @@ namespace Aimachine.Controllers
                       x.Id,
                       x.DepartmentId,
                       DepartmentTitle = x.Department != null ? x.Department.DepartmentTitle : "",
-                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null : $"{baseUrl}/uploads/partners/{x.Image}",
+                      // ✅ ดัก URL
+                      ImageUrl = string.IsNullOrEmpty(x.Image) ? null :
+                                 (x.Image.StartsWith("http") ? x.Image : $"{baseUrl}/uploads/partners/{x.Image}"),
                       x.Name,
                       x.Status,
                       x.CreatedBy,
@@ -154,10 +160,9 @@ namespace Aimachine.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(new { Message = "ข้อมูลไม่ถูกต้อง", Errors = ModelState });
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพ (ขนาด + ประเภท)
             if (request.ImageFile != null && !IsAllowedImageFile(request.ImageFile))
             {
-                return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
+                return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง" });
             }
 
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -188,22 +193,17 @@ namespace Aimachine.Controllers
                     };
 
                     _context.Partners.Add(entity);
-                    await _context.SaveChangesAsync();
+                    await _context.SaveChangesAsync(); // บันทึกก่อนเพื่อให้ได้ ID (ถ้าจำเป็น)
 
                     if (request.ImageFile != null)
                     {
-                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+                        // ✅ อัปโหลดรูปใหม่ขึ้น Cloudinary
+                        var uploadResult = await _photoService.AddPhotoAsync(request.ImageFile, "partners");
+                        if (uploadResult.Error != null) throw new Exception(uploadResult.Error.Message);
 
-                        string newFileName = $"{Guid.NewGuid()}{Path.GetExtension(request.ImageFile.FileName)}";
-                        string filePath = Path.Combine(uploadsFolder, newFileName);
+                        entity.Image = uploadResult.SecureUrl.AbsoluteUri;
+                        entity.PublicId = uploadResult.PublicId; // ✅ บันทึก ID สำหรับใช้ลบ
 
-                        using (var fileStream = new FileStream(filePath, FileMode.Create))
-                        {
-                            await request.ImageFile.CopyToAsync(fileStream);
-                        }
-
-                        entity.Image = newFileName;
                         await _context.SaveChangesAsync();
                     }
 
@@ -224,10 +224,9 @@ namespace Aimachine.Controllers
         {
             int currentUserId = User.GetUserId();
 
-            // 🛡️ ตรวจสอบไฟล์รูปภาพใหม่ (ขนาด + ประเภท)
             if (request.ImageFile != null && !IsAllowedImageFile(request.ImageFile))
             {
-                return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง (ต้องเป็น .jpg/.png และขนาดไม่เกิน 5MB)" });
+                return BadRequest(new { Message = $"ไฟล์ '{request.ImageFile.FileName}' ไม่ถูกต้อง" });
             }
 
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -257,24 +256,25 @@ namespace Aimachine.Controllers
 
                     if (request.ImageFile != null)
                     {
-                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
-                        if (!string.IsNullOrEmpty(entity.Image))
+                        // ✅ จัดการลบรูปเก่า (รองรับทั้งระบบ Local เดิม และ Cloudinary ใหม่)
+                        if (!string.IsNullOrEmpty(entity.PublicId))
                         {
+                            await _photoService.DeletePhotoAsync(entity.PublicId); // ลบจาก Cloudinary
+                        }
+                        else if (!string.IsNullOrEmpty(entity.Image) && !entity.Image.StartsWith("http"))
+                        {
+                            // ลบจากโฟลเดอร์ในเครื่อง (ของเก่า)
+                            string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
                             string oldFilePath = Path.Combine(uploadsFolder, entity.Image);
                             if (System.IO.File.Exists(oldFilePath)) System.IO.File.Delete(oldFilePath);
                         }
 
-                        string newFileName = $"{Guid.NewGuid()}{Path.GetExtension(request.ImageFile.FileName)}";
-                        string filePath = Path.Combine(uploadsFolder, newFileName);
+                        // ✅ อัปโหลดรูปใหม่ขึ้น Cloudinary
+                        var uploadResult = await _photoService.AddPhotoAsync(request.ImageFile, "partners");
+                        if (uploadResult.Error != null) throw new Exception(uploadResult.Error.Message);
 
-                        using (var fileStream = new FileStream(filePath, FileMode.Create))
-                        {
-                            await request.ImageFile.CopyToAsync(fileStream);
-                        }
-
-                        entity.Image = newFileName;
+                        entity.Image = uploadResult.SecureUrl.AbsoluteUri;
+                        entity.PublicId = uploadResult.PublicId;
                     }
 
                     await _context.SaveChangesAsync();
@@ -299,21 +299,21 @@ namespace Aimachine.Controllers
                 var entity = await _context.Partners.FindAsync(id);
                 if (entity == null) return NotFound(new { Message = "ไม่พบ Partner นี้" });
 
-                string imageToDelete = entity.Image;
+                // ✅ จัดการลบรูป (รองรับทั้ง 2 ระบบ)
+                if (!string.IsNullOrEmpty(entity.PublicId))
+                {
+                    await _photoService.DeletePhotoAsync(entity.PublicId); // ลบจาก Cloud
+                }
+                else if (!string.IsNullOrEmpty(entity.Image) && !entity.Image.StartsWith("http"))
+                {
+                    // ลบจาก Local
+                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
+                    string filePath = Path.Combine(uploadsFolder, entity.Image);
+                    if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath);
+                }
 
                 _context.Partners.Remove(entity);
                 await _context.SaveChangesAsync();
-
-                if (!string.IsNullOrEmpty(imageToDelete))
-                {
-                    string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "partners");
-                    string filePath = Path.Combine(uploadsFolder, imageToDelete);
-
-                    if (System.IO.File.Exists(filePath))
-                    {
-                        System.IO.File.Delete(filePath);
-                    }
-                }
 
                 return Ok(new { Message = "ลบข้อมูลสำเร็จ" });
             }
@@ -363,9 +363,9 @@ namespace Aimachine.Controllers
                         p.Id,
                         p.DepartmentId,
                         DepartmentTitle = p.Department != null ? p.Department.DepartmentTitle : "",
-                        ImageUrl = string.IsNullOrEmpty(p.Image)
-                            ? null
-                            : $"{baseUrl}/uploads/partners/{p.Image}",
+                        // ✅ ดัก URL
+                        ImageUrl = string.IsNullOrEmpty(p.Image) ? null :
+                                   (p.Image.StartsWith("http") ? p.Image : $"{baseUrl}/uploads/partners/{p.Image}"),
                         p.Name,
                         p.Status,
                         p.CreatedAt,

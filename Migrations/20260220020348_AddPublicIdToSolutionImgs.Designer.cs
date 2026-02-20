@@ -3,6 +3,7 @@ using System;
 using Aimachine.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Aimachine.Migrations
 {
     [DbContext(typeof(AimachineContext))]
-    partial class AimachineContextModelSnapshot : ModelSnapshot
+    [Migration("20260220020348_AddPublicIdToSolutionImgs")]
+    partial class AddPublicIdToSolutionImgs
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -119,9 +122,6 @@ namespace Aimachine.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("profile_img");
-
-                    b.Property<string>("PublicId")
-                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -386,9 +386,6 @@ namespace Aimachine.Migrations
                     b.Property<int?>("OrderId")
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
-
-                    b.Property<string>("PublicId")
-                        .HasColumnType("text");
 
                     b.HasKey("Id");
 
@@ -706,9 +703,6 @@ namespace Aimachine.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
-
-                    b.Property<string>("PublicId")
-                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()

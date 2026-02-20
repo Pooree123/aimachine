@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using Aimachine.Services; // ✅ เพิ่มบรรทัดนี้เพื่อใช้งาน IPhotoService
 
 namespace Aimachine.Controllers
 {
@@ -12,12 +13,12 @@ namespace Aimachine.Controllers
     public class SolutionsController : ControllerBase
     {
         private readonly AimachineContext _context;
-        private readonly IWebHostEnvironment _environment;
+        private readonly IPhotoService _photoService; // ✅ เปลี่ยนจาก IWebHostEnvironment
 
-        public SolutionsController(AimachineContext context, IWebHostEnvironment environment)
+        public SolutionsController(AimachineContext context, IPhotoService photoService)
         {
             _context = context;
-            _environment = environment;
+            _photoService = photoService;
         }
 
         // ✅ Helper Function: เช็คไฟล์รูป + ขนาดไฟล์
@@ -56,16 +57,7 @@ namespace Aimachine.Controllers
                         .Select(tag => new
                         {
                             TagId = tag.Id,
-                            TagTitle = tag.TechStackTitle,
-                            Techs = tag.TechStackTag1s
-                                .Where(bridge => bridge.Tech != null)
-                                .Select(bridge => new
-                                {
-                                    TechId = bridge.Tech!.Id,
-                                    TechHeader = bridge.Tech.Header,
-                                    TechDescription = bridge.Tech.Description
-                                })
-                                .ToList()
+                            TagTitle = tag.TechStackTitle
                         })
                         .ToList(),
 
@@ -84,7 +76,9 @@ namespace Aimachine.Controllers
                                 .Select(img => new
                                 {
                                     img.Id,
-                                    Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
+                                    // ✅ รองรับทั้งรูประบบเก่า (Local) และรูประบบใหม่ (Cloudinary)
+                                    Url = string.IsNullOrEmpty(img.Image) ? null :
+                                          (img.Image.StartsWith("http") ? img.Image : $"{baseUrl}/{img.Image}"),
                                     img.IsCover
                                 })
                                 .ToList(),
@@ -120,7 +114,9 @@ namespace Aimachine.Controllers
                         .Select(img => new
                         {
                             img.Id,
-                            Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
+                            // ✅ ดัก URL เหมือนกัน
+                            Url = string.IsNullOrEmpty(img.Image) ? null :
+                                  (img.Image.StartsWith("http") ? img.Image : $"{baseUrl}/{img.Image}"),
                             img.IsCover,
                             img.OrderId
                         })
@@ -151,7 +147,8 @@ namespace Aimachine.Controllers
                     Images = s.SolutionImgs.Select(img => new
                     {
                         img.Id,
-                        Url = string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}",
+                        Url = string.IsNullOrEmpty(img.Image) ? null :
+                              (img.Image.StartsWith("http") ? img.Image : $"{baseUrl}/{img.Image}"),
                         img.IsCover
                     }).OrderByDescending(i => i.IsCover).ToList(),
                     s.CreatedAt,
@@ -194,7 +191,6 @@ namespace Aimachine.Controllers
                     {
                         DepartmentId = dto.DepartmentId,
                         Name = dto.Name,
-                        // Description = dto.Description, <-- ลบออก
                         Status = dto.Status,
                         CreatedBy = currentUserId,
                         UpdateBy = currentUserId,
@@ -207,25 +203,20 @@ namespace Aimachine.Controllers
 
                     if (dto.ImageFiles != null && dto.ImageFiles.Count > 0)
                     {
-                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "solutions");
-                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
                         bool isFirstImage = true;
                         foreach (var file in dto.ImageFiles)
                         {
                             if (file.Length > 0)
                             {
-                                string fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-                                string filePath = Path.Combine(uploadsFolder, fileName);
-                                using (var stream = new FileStream(filePath, FileMode.Create))
-                                {
-                                    await file.CopyToAsync(stream);
-                                }
+                                // ✅ อัปโหลดขึ้น Cloudinary
+                                var uploadResult = await _photoService.AddPhotoAsync(file, "solutions");
+                                if (uploadResult.Error != null) throw new Exception(uploadResult.Error.Message);
 
                                 var imgEntity = new SolutionImg
                                 {
                                     SolutionId = solution.Id,
-                                    Image = $"uploads/solutions/{fileName}",
+                                    Image = uploadResult.SecureUrl.AbsoluteUri, // ✅ เซฟ URL ของคลาวด์
+                                    PublicId = uploadResult.PublicId,           // ✅ เซฟ ID สำหรับตอนลบ
                                     IsCover = isFirstImage,
                                     OrderId = 0
                                 };
@@ -284,23 +275,19 @@ namespace Aimachine.Controllers
 
                     entity.DepartmentId = dto.DepartmentId;
                     entity.Name = dto.Name;
-                    // entity.Description = dto.Description; <-- ลบออก
                     entity.Status = dto.Status;
                     entity.UpdateBy = currentUserId;
                     entity.UpdateAt = DateTime.UtcNow.AddHours(7);
 
                     if (dto.NewImageFiles != null && dto.NewImageFiles.Count > 0)
                     {
-                        string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "solutions");
-                        if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
-
                         var oldCover = entity.SolutionImgs.FirstOrDefault(img => img.IsCover == true);
                         if (oldCover != null)
                         {
-                            if (!string.IsNullOrEmpty(oldCover.Image))
+                            // ✅ ลบรูปเก่าจาก Cloudinary (ถ้ามี PublicId)
+                            if (!string.IsNullOrEmpty(oldCover.PublicId))
                             {
-                                string oldPath = Path.Combine(_environment.WebRootPath, oldCover.Image);
-                                if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
+                                await _photoService.DeletePhotoAsync(oldCover.PublicId);
                             }
                             _context.SolutionImgs.Remove(oldCover);
                         }
@@ -310,17 +297,15 @@ namespace Aimachine.Controllers
                         {
                             if (file.Length > 0)
                             {
-                                string fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
-                                string filePath = Path.Combine(uploadsFolder, fileName);
-                                using (var stream = new FileStream(filePath, FileMode.Create))
-                                {
-                                    await file.CopyToAsync(stream);
-                                }
+                                // ✅ อัปโหลดใหม่ขึ้น Cloudinary
+                                var uploadResult = await _photoService.AddPhotoAsync(file, "solutions");
+                                if (uploadResult.Error != null) throw new Exception(uploadResult.Error.Message);
 
                                 var imgEntity = new SolutionImg
                                 {
                                     SolutionId = entity.Id,
-                                    Image = $"uploads/solutions/{fileName}",
+                                    Image = uploadResult.SecureUrl.AbsoluteUri,
+                                    PublicId = uploadResult.PublicId,
                                     IsCover = isFirstNewImage,
                                     OrderId = 0
                                 };
@@ -359,10 +344,10 @@ namespace Aimachine.Controllers
                 {
                     foreach (var img in entity.SolutionImgs)
                     {
-                        if (!string.IsNullOrEmpty(img.Image))
+                        // ✅ ลบรูปทั้งหมดของ Solution นี้ออกจาก Cloudinary
+                        if (!string.IsNullOrEmpty(img.PublicId))
                         {
-                            string fullPath = Path.Combine(_environment.WebRootPath, img.Image);
-                            if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
+                            await _photoService.DeletePhotoAsync(img.PublicId);
                         }
                     }
                     _context.SolutionImgs.RemoveRange(entity.SolutionImgs);
@@ -385,10 +370,10 @@ namespace Aimachine.Controllers
             var img = await _context.SolutionImgs.FindAsync(imgId);
             if (img == null) return NotFound(new { Message = "ไม่พบรูปภาพ" });
 
-            if (!string.IsNullOrEmpty(img.Image))
+            // ✅ ลบรูปเดียวจาก Cloudinary
+            if (!string.IsNullOrEmpty(img.PublicId))
             {
-                string fullPath = Path.Combine(_environment.WebRootPath, img.Image);
-                if (System.IO.File.Exists(fullPath)) System.IO.File.Delete(fullPath);
+                await _photoService.DeletePhotoAsync(img.PublicId);
             }
 
             _context.SolutionImgs.Remove(img);
@@ -443,7 +428,8 @@ namespace Aimachine.Controllers
                         CoverUrl = s.SolutionImgs
                             .OrderByDescending(img => img.IsCover)
                             .ThenBy(img => img.Id)
-                            .Select(img => string.IsNullOrEmpty(img.Image) ? null : $"{baseUrl}/{img.Image}")
+                            .Select(img => string.IsNullOrEmpty(img.Image) ? null :
+                                           (img.Image.StartsWith("http") ? img.Image : $"{baseUrl}/{img.Image}")) 
                             .FirstOrDefault(),
                         ImagesCount = s.SolutionImgs.Count()
                     })

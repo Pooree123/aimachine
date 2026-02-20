@@ -9,6 +9,8 @@ public partial class EventsImg
 
     public int EventsId { get; set; }
 
+    public string? PublicId { get; set; }
+
     public string? Image { get; set; }
 
     public bool? IsCover { get; set; }

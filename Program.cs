@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using Aimachine.Services;
 
 // ✅ 1. เพิ่มบรรทัดนี้: แก้ปัญหา DateTime ของ PostgreSQL (สำคัญมาก ไม่งั้นจะ Error เวลา save วันที่)
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -63,6 +64,10 @@ builder.Services.AddSwaggerGen(c =>
         new string[] { }
     }});
 });
+
+builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
+
+builder.Services.AddScoped<IPhotoService, PhotoService>();
 
 var app = builder.Build();
 

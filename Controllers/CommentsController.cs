@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Aimachine.Extensions;
+using Aimachine.Services; // ✅ เพิ่มเพื่อใช้งาน Cloudinary
 
 namespace Aimachine.Controllers;
 
@@ -12,12 +13,12 @@ namespace Aimachine.Controllers;
 public class CommentsController : ControllerBase
 {
     private readonly AimachineContext _context;
-    private readonly IWebHostEnvironment _environment;
+    private readonly IPhotoService _photoService; // ✅ เปลี่ยนมาใช้ IPhotoService แทน
 
-    public CommentsController(AimachineContext context, IWebHostEnvironment environment)
+    public CommentsController(AimachineContext context, IPhotoService photoService)
     {
         _context = context;
-        _environment = environment;
+        _photoService = photoService;
     }
 
     // ✅ Helper Function: เช็คไฟล์รูป
@@ -46,6 +47,7 @@ public class CommentsController : ControllerBase
               c.JobTitleId,
               JobTitleName = c.JobTitle != null ? c.JobTitle.JobsTitle : "",
               c.Status,
+              // ✅ โค้ดคุณเขียนดักลิงก์ http ไว้ดีแล้ว รองรับ Cloudinary ได้ทันที
               ProfileImg = !string.IsNullOrEmpty(c.ProfileImg) && c.ProfileImg.StartsWith("http")
                            ? c.ProfileImg
                            : (string.IsNullOrEmpty(c.ProfileImg) ? null : $"{baseUrl}/{c.ProfileImg}"),
@@ -115,25 +117,21 @@ public class CommentsController : ControllerBase
             return BadRequest(new { Message = "ไม่พบตำแหน่งงานนี้" });
 
         if (dto.ImageFile != null && !IsAllowedImageFile(dto.ImageFile))
-            return BadRequest(new { Message = "ไฟล์รูปภาพไม่ถูกต้อง (รองรับ .jpg, .png ขนาดไม่เกิน 5MB)" });
+            return BadRequest(new { Message = "ไฟล์รูปภาพไม่ถูกต้อง (รองรับ .jpg, .png, .webp ขนาดไม่เกิน 5MB)" });
 
         try
         {
+            // ใช้ค่า Default สำหรับกรณีที่ไม่ได้แนบรูปมา
             string imagePath = "uploads/Default_pfp.jpg";
 
             if (dto.ImageFile != null && dto.ImageFile.Length > 0)
             {
-                string uploadsFolder = Path.Combine(_environment.WebRootPath, "uploads", "comments");
-                if (!Directory.Exists(uploadsFolder)) Directory.CreateDirectory(uploadsFolder);
+                // ✅ อัปโหลดรูปขึ้น Cloudinary
+                var uploadResult = await _photoService.AddPhotoAsync(dto.ImageFile, "comments");
+                if (uploadResult.Error != null) throw new Exception(uploadResult.Error.Message);
 
-                string fileName = $"{Guid.NewGuid()}{Path.GetExtension(dto.ImageFile.FileName)}";
-                string fullPath = Path.Combine(uploadsFolder, fileName);
-
-                using (var stream = new FileStream(fullPath, FileMode.Create))
-                {
-                    await dto.ImageFile.CopyToAsync(stream);
-                }
-                imagePath = $"uploads/comments/{fileName}";
+                // ได้ URL เต็มมาเก็บลงฐานข้อมูลเลย
+                imagePath = uploadResult.SecureUrl.AbsoluteUri;
             }
             else if (!string.IsNullOrEmpty(dto.ProfileImg))
             {
@@ -166,7 +164,6 @@ public class CommentsController : ControllerBase
     [Authorize]
     public async Task<IActionResult> UpdateStatus(int id, [FromBody] UpdateCommentStatusDto dto)
     {
-        // ตรวจสอบค่า Status ว่าถูกต้องไหม (ถ้าจำเป็น)
         if (dto.Status != "Active" && dto.Status != "inActive")
         {
             return BadRequest(new { Message = "Status ต้องเป็น 'Active' หรือ 'inActive' เท่านั้น" });
@@ -177,7 +174,6 @@ public class CommentsController : ControllerBase
 
         try
         {
-            // 📝 อัปเดตแค่ Status อย่างเดียว
             entity.Status = dto.Status;
 
             await _context.SaveChangesAsync();
