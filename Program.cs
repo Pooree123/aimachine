@@ -11,6 +11,15 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ✅ ปิดการเฝ้าดูไฟล์ Config (แก้ปัญหา inotify limit บน Linux/Docker อย่าง Render)
+builder.Host.ConfigureAppConfiguration((hostingContext, config) =>
+{
+    foreach (var source in config.Sources.OfType<Microsoft.Extensions.Configuration.FileConfigurationSource>())
+    {
+        source.ReloadOnChange = false;
+    }
+});
+
 // CORS
 builder.Services.AddCors(options =>
 {
